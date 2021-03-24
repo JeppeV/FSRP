@@ -19,9 +19,6 @@ open FSRP.Library
 //    Signal(acc, (delay(lazy(iter f (adv((unbox f) acc))))))
 
 
-//[<SF>]
-//let rec from () (n: int) : Signal<int> =
-//    Signal(n, delay(lazy(from () (progress(n + 1)))))
 
 
 let test = 
@@ -30,6 +27,7 @@ let test =
 
 let con_then_map = (map (box (lazy(fun (a : int) -> a * a))) (con (box (lazy(2))) ()))
 
-let rec test4 (s: Signal<int>) x = match s with | Signal(hd, tl) -> (test4 (adv tl) x)
+
+let rec test4 (s: Signal<int>) x = match s with | Signal(hd, tl) -> Signal(hd, delay(lazy((test4 (adv tl) x))))
 
 

@@ -218,7 +218,7 @@ let main argv =
     
 
     // Sample input for the compiler service
-    let files = ["FRPLibrary.fs"; "TestInput.fs"]
+    let files = ["FRPLibrary.fs"]
 
     let mainFile = files.Item(files.Length - 1)
     let projectOptions = getProjectOptions mainFile files

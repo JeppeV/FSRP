@@ -73,6 +73,8 @@
             | Signal(hd, tl) -> 
                 Signal(unbox(f)(hd), (delay(lazy(map f (adv tl)))))
 
+
+
         //let map2<'A,'B> : Box<'A -> 'B> -> Box<Signal<'A> -> Signal<'B>> = 
 
         //    SF(fun (f: Box<'A -> 'B>) (s: Signal<'A>) map2 ->
@@ -86,19 +88,30 @@
         //    )
 
 
-        //[<SF>]
-        //let rec iter (f: Box<'A -> Later<'A>>) (acc: 'A) : Signal<'A> =
-        //    Signal(acc, (delay(lazy(iter f (adv((unbox f) acc))))))
+        let rec iter (f: Box<'A -> Later<'A>>) (acc: 'A) : Signal<'A> =
+            Signal(acc, (delay(lazy(iter f (adv((unbox f) acc))))))
 
-        [<SF>]
         let rec con (a: Box<'A>) () : Signal<'A> = 
             Signal((unbox(a), delay(lazy(con a ()))))
 
-        //let rec nats () = iter (box (lazy(fun (a : int) -> delay(lazy(a + 1))))) 0
+        let rec from () (n: int) : Signal<int> =
+            Signal(n, delay(lazy(from () (progress(n + 1)))))
 
-        //let inner_test () (s: Signal<List<int>>) test2 : Signal<int> =
-        //    match s with
-        //    | Signal(hd, tl) -> Signal(List.sum hd, delay(lazy(((adv(test2)) (adv(tl))))))
+        
+        let map_add_1 = (map (box (lazy (fun (i: int) -> i + 1))))
+        
+        
+
+        let rec ones = Signal(1, delay(lazy(ones)))
+
+
+
+        let nats = iter (box (lazy(fun (a : int) -> delay(lazy(a + 1))))) 0
+
+
+        let inner_test  (s: Signal<List<int>>) test2 : Signal<int> =
+            match s with
+            | Signal(hd, tl) -> Signal(List.sum hd, delay(lazy(((adv(test2)) (adv(tl))))))
 
         //let test2 = SF(inner_test)
 

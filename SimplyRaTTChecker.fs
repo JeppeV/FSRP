@@ -74,6 +74,7 @@ let rec isUnstableType(t: FSharpType) : bool =
 and isUnstableTypes (ts : FSharpType list) : bool = 
     List.fold (fun acc t -> (isUnstableType t) || acc) false ts
 
+
 let rec isSignalType(t: FSharpType) : bool = 
     if t.IsFunctionType then
         let returnType = t.GenericArguments.Item(t.GenericArguments.Count-1)
@@ -90,6 +91,10 @@ let rec isSignalType(t: FSharpType) : bool =
            List.fold (fun acc t -> (isSignalType t) || acc) false (Seq.toList t.GenericArguments)
         else false
     else false
+
+let isSignalFunctionType(t: FSharpType) : bool = 
+    t.IsFunctionType && (isSignalType (t.GenericArguments.Item (t.GenericArguments.Count-1)))
+
 
 let isInitialEnv (env: Environment) = not env.Now && not env.Later
 
@@ -132,22 +137,26 @@ let canLookup (env: Environment) (s: FSharpMemberOrFunctionOrValue) =
                 No($"%s{formatErrorPrefix(s.DeclarationLocation)}Cannot access variable {s.LogicalName} in a LATER context, as it is only accessible in an INITIAL context")
             else Yes
         else if isNowEnv env then
-            if env.NowEnv.Contains(s.LogicalName) then
+            if env.LaterEnv.Contains(s.LogicalName) then
+                No($"%s{formatErrorPrefix(s.DeclarationLocation)} Cannot access variable {s.LogicalName} in a NOW context, as it is only accessible in a LATER context")
+            else if env.NowEnv.Contains(s.LogicalName) then
                 Yes
             else if env.InitialEnv.Contains(s.LogicalName) then
                 No($"%s{formatErrorPrefix(s.DeclarationLocation)} Cannot access variable {s.LogicalName} in a NOW context, as it is only accessible in an INITIAL context")
-            else 
-                Yes
+            else Yes
         else if isInitialEnv env then
-            if env.InitialEnv.Contains(s.LogicalName) then
+            if env.LaterEnv.Contains(s.LogicalName) then 
+                No($"%s{formatErrorPrefix(s.DeclarationLocation)} Cannot access variable {s.LogicalName} in a INITIAL context, as it is only accessible in a LATER context")
+            else if env.NowEnv.Contains(s.LogicalName) then
+                 No($"%s{formatErrorPrefix(s.DeclarationLocation)} Cannot access variable {s.LogicalName} in a INITIAL context, as it is only accessible in a NOW context")
+            else if env.InitialEnv.Contains(s.LogicalName) then
                 Yes
-            else
-                Yes
-        else 
-            Yes
+            else Yes
+        else Yes
 
 
 let rec checkExpr (env: Environment) (e:FSharpExpr) : string list  =
+
     //printfn "%A" e
     match e with
     | BasicPatterns.AddressOf(lvalueExpr) ->
@@ -161,8 +170,11 @@ let rec checkExpr (env: Environment) (e:FSharpExpr) : string list  =
         //printfn "APP ARG EXPS: %A" argExprs
         match funcExpr with 
         | BasicPatterns.Value(value) when value.LogicalName.Equals env.SignalFunInfo.SignalFunName ->
-            let funInfo = { env.SignalFunInfo with IsRecApp = true }
-            checkExprs { env with SignalFunInfo = funInfo } argExprs // in this case the argExps should only contain a single argument (which can be a tuple)
+            match canLookup env value with
+            | Yes ->    
+                let funInfo = { env.SignalFunInfo with IsRecApp = true }
+                checkExprs { env with SignalFunInfo = funInfo } argExprs
+            | No(error) -> [error]
         | _ -> List.append (checkExpr env funcExpr) (checkExprs env argExprs)
 
     | BasicPatterns.Call(objExprOpt, memberOrFunc, typeArgs1, typeArgs2, argExprs) ->
@@ -178,14 +190,13 @@ let rec checkExpr (env: Environment) (e:FSharpExpr) : string list  =
         let objExprErrors = checkObjArg env objExprOpt
         let (env', isTemporal, envErrorList) = 
                 if memberOrFunc.LogicalName = env.SignalFunInfo.SignalFunName then
-                    let errorOpt = if isLaterEnv env then [] else [$"%s{formatErrorPrefix(e.Range)} Recursive application cannot appear outside a LATER context"]
-                    ({ env with SignalFunInfo = { env.SignalFunInfo with IsRecApp = true }}, false, errorOpt)
+                    let errors = if isLaterEnv env then [] else [$"%s{formatErrorPrefix(e.Range)} Recursive application cannot appear outside a LATER context"]
+                    ({ env with SignalFunInfo = { env.SignalFunInfo with IsRecApp = true }}, false, errors)
                 else if fullName = delayFullName then
                     if isNowEnv env then  
                         printfn "%s" "ENTERING DELAY"
                         ({ env with 
                             Later = true;
-                            LaterEnv = Set([])
                         }, true, [])
                     else 
                         (env, true, [$"%s{formatErrorPrefix(e.Range)} {delayFullName} cannot appear outside a NOW context"])
@@ -194,7 +205,6 @@ let rec checkExpr (env: Environment) (e:FSharpExpr) : string list  =
                             printfn "%s" "ENTERING ADV"
                             ({ env with 
                                 Later = false;
-                                LaterEnv = Set([])
                             }, true, [])   
                         else 
                             (env, true, [$"%s{formatErrorPrefix(e.Range)} {advFullName} cannot appear outside a LATER context"])
@@ -203,23 +213,19 @@ let rec checkExpr (env: Environment) (e:FSharpExpr) : string list  =
                         printfn "%s" "ENTERING BOX"
                         ({ env with 
                             Now = true;
-                            NowEnv = Set([])
                             Later = false;
-                            LaterEnv = Set([])
                         }, true, [])  
                     else 
                         (env, true, [$"%s{formatErrorPrefix(e.Range)} {boxFullName} cannot appear outside an INITIAL context"])
-                else if fullName = unboxFullName then
-                    if isNowEnv env then
-                        printfn "%s" "ENTERING UNBOX"
-                        ({ env with 
-                            Now = false;
-                            NowEnv = Set([])
-                            Later = false;
-                            LaterEnv = Set([])
-                        }, true, [])  
-                    else 
-                        (env, true, [$"%s{formatErrorPrefix(e.Range)} {unboxFullName} cannot appear outside a NOW context"])
+                //else if fullName = unboxFullName then
+                //    if isNowEnv env then
+                //        printfn "%s" "ENTERING UNBOX"
+                //        ({ env with 
+                //            Now = false;
+                //            Later = false;
+                //        }, true, [])  
+                //    else 
+                //        (env, true, [$"%s{formatErrorPrefix(e.Range)} {unboxFullName} cannot appear outside a NOW context"])
                 else if fullName = progressFullName then 
                     if isLaterEnv env then
                         let argsAreUnstable = isUnstableTypes (List.map (fun (e: FSharpExpr) -> e.Type) argExprs)
@@ -229,7 +235,6 @@ let rec checkExpr (env: Environment) (e:FSharpExpr) : string list  =
                             printfn "%s" "ENTERING PROGRESS"
                             ({ env with 
                                 Later = false;
-                                LaterEnv = Set([])
                             }, true, [])   
                     else 
                         (env, true, [$"%s{formatErrorPrefix(e.Range)} {progressFullName} cannot appear outside a LATER context"])
@@ -242,9 +247,7 @@ let rec checkExpr (env: Environment) (e:FSharpExpr) : string list  =
                             printfn "%s" "ENTERING PROMOTE"
                             ({ env with 
                                 Now = false
-                                NowEnv = Set([]);
                                 Later = false;
-                                LaterEnv = Set([])
                             }, true, [])   
                     else
                         (env, true, [$"%s{formatErrorPrefix(e.Range)} {promoteFullName} cannot appear outside a NOW context"])
@@ -374,78 +377,78 @@ and checkObjArg (env: Environment) objOpt : string list  =
 and checkObjMember (env: Environment) memb : string list  =
     checkExpr env memb.Body 
 
-let private checkSignalFunction (func: FSharpMemberOrFunctionOrValue) (args: FSharpMemberOrFunctionOrValue list list) (body: FSharpExpr) =
-    
-    let folder1 = (fun ((args, argsCG) : Set<string> * Set<string>) (a: FSharpMemberOrFunctionOrValue) ->
+let argsToEnvs (args: FSharpMemberOrFunctionOrValue list) =
+    let folder = (fun ((args, argsCG) : Set<string> * Set<string>) (a: FSharpMemberOrFunctionOrValue) ->
         if a.IsCompilerGenerated then
             (args, argsCG.Add(a.FullName))
         else 
             (args.Add(a.FullName), argsCG)
     )
-    let (initialEnv, initialEnvCG) = (List.fold folder1 (Set([]), Set([])) args.[0])
-    let (nowEnv, nowEnvCG) = (List.fold folder1 (Set([]), Set([])) args.[1])           
+    (List.fold folder (Set([]), Set([])) args)
 
-    let env : Environment = {
-        SignalFunInfo = {
-            SignalFunName = func.LogicalName
-            IsRecApp = false;
-        };
-        InitialEnv = initialEnv;
-        InitialEnvCG = initialEnvCG;
-        Now = true;
-        NowEnv = nowEnv
-        NowEnvCG = nowEnvCG
-        Later = false;
-        LaterEnv = Set([func.LogicalName]);
-        LaterEnvCG = Set([])
-    }
-
-    body |> checkExpr env
-
-let checkOther (func: FSharpMemberOrFunctionOrValue) (args: FSharpMemberOrFunctionOrValue list list) (body: FSharpExpr) =
-    
-    let folder1 = (fun ((args, argsCG) : Set<string> * Set<string>) (a: FSharpMemberOrFunctionOrValue) ->
-        if a.IsCompilerGenerated then
-            (args, argsCG.Add(a.FullName))
-        else 
-            (args.Add(a.FullName), argsCG)
-    )
-    
-    let (initialEnv, initialEnvCG) = (List.fold folder1 (Set([]), Set([])) (List.collect (fun l -> l) args))
-
-    
-    let env : Environment = {
-        SignalFunInfo = {
-            SignalFunName = ""
-            IsRecApp = false;
-        };
-        InitialEnv = initialEnv
-        InitialEnvCG = initialEnvCG;
-        Now = false;
-        NowEnv = Set([]);
-        NowEnvCG = Set([]);
-        Later = false;
-        LaterEnv = Set([]);
-        LaterEnvCG = Set([])
-    }
-
-    body |> checkExpr env
 
 let isSignalFunction (memberOrFunctionOrValue: FSharpMemberOrFunctionOrValue) =
     (List.exists (fun (a : FSharpAttribute) -> 
         a.AttributeType.AccessPath = fsrpCoreAccessPath && a.AttributeType.DisplayName = "SFAttribute"
     ) (List.ofSeq memberOrFunctionOrValue.Attributes))
 
-let checkMemberOrFunctionOrValue (memberOrFuncOrValue: FSharpMemberOrFunctionOrValue) (args: FSharpMemberOrFunctionOrValue list list) (body: FSharpExpr) =
-    printfn "Checking declaration %A" memberOrFuncOrValue.LogicalName
-    if isSignalFunction memberOrFuncOrValue then
-        if args.Length = 2 then
-            checkSignalFunction memberOrFuncOrValue args body       
+let checkMemberOrFunctionOrValue (memberOrFuncOrValue: FSharpMemberOrFunctionOrValue) (args: FSharpMemberOrFunctionOrValue list list) (body: FSharpExpr) = 
+    
+    let isSignalFunction = isSignalFunctionType memberOrFuncOrValue.FullType
+    printfn "Checking declaration %A, isSignalFunction: %A" memberOrFuncOrValue.LogicalName isSignalFunction
+    //printfn "With body: %A" body
+
+    
+
+    let defaultEnv : Environment = 
+                {
+                    SignalFunInfo = {
+                        SignalFunName = ""
+                        IsRecApp = false;
+                    };
+                    InitialEnv = Set([]);
+                    InitialEnvCG = Set([]);
+                    Now = false;
+                    NowEnv = Set([]);
+                    NowEnvCG = Set([]);
+                    Later = false;
+                    LaterEnv = Set([]);
+                    LaterEnvCG = Set([])
+                }
+
+    let env : Environment = 
+        if args.Length > 0 then
+            let (argsEnv, argsEnvCG) = argsToEnvs (List.collect (fun l -> l) args)     
+            if isSignalFunction then
+                { defaultEnv with  
+                    SignalFunInfo = {
+                        SignalFunName = memberOrFuncOrValue.LogicalName
+                        IsRecApp = false;
+                    };
+                    Now = true;
+                    NowEnv = argsEnv;
+                    NowEnvCG = argsEnvCG;
+                    LaterEnv = Set([memberOrFuncOrValue.LogicalName]); 
+                }
+            else 
+                { defaultEnv with  
+                    SignalFunInfo = {
+                        SignalFunName = ""
+                        IsRecApp = false;
+                    };
+                    InitialEnv = argsEnv.Add(memberOrFuncOrValue.LogicalName)
+                    InitialEnvCG = argsEnvCG
+                }
         else 
-            [$"%s{formatErrorPrefix(memberOrFuncOrValue.DeclarationLocation)} Signal function must accept exactly 2 arguments, which can be either unit, single values or tuples"]
-    else if not memberOrFuncOrValue.IsCompilerGenerated then
-        checkOther memberOrFuncOrValue args body
-    else []
+            defaultEnv
+    if memberOrFuncOrValue.IsCompilerGenerated then       
+        try
+            checkExpr env body
+        with
+        | _ -> []
+    else checkExpr env body
+    
+
 
 let rec checkDeclarations (declarations: FSharpImplementationFileDeclaration list) : string list =
     (List.collect checkDeclaration declarations)

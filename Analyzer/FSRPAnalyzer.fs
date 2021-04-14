@@ -16,7 +16,7 @@ let fsrpAnalyzer : Analyzer =
         |> Seq.map (fun e ->
             { Type = "FSRP Analyzer"
               Message = e.message
-              Code = "FSRP6"
+              Code = "FSRP001"
               Severity = match e.severity with | FSRPErrorSeverity.Warning-> Severity.Warning | FSRPErrorSeverity.Error -> Severity.Error 
               Range = e.range
               Fixes = []}

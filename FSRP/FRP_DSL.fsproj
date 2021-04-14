@@ -1,8 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
-    <TargetFramework>netcoreapp3.1</TargetFramework>
+    <TargetFramework>net5.0</TargetFramework>
   </PropertyGroup>
 
   <ItemGroup>
@@ -16,11 +15,12 @@
     <Compile Include="TestInput.fs">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Compile>
-    <Compile Include="Program.fs" />
+    <Compile Include="FSRPAnalyzer.fs" />
     <Compile Include="FRPLibraryTest.fs" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="FSharp.Analyzers.SDK" Version="0.8.0" />
     <PackageReference Include="FSharp.Compiler.Service" Version="39.0.0" />
   </ItemGroup>
 

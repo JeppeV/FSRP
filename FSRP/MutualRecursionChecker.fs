@@ -1,9 +1,9 @@
-﻿module PurityChecker
+﻿module MutualRecusionChecker
 
 open FSharp.Compiler.SyntaxTree
 open FSharp.Compiler.SourceCodeServices
-open FSharp.Compiler.Text
 open Utility
+open FSRPError
 
 let rec last (l: 'a list) : Option<'a> =
     match l with
@@ -233,7 +233,7 @@ let rec checkModuleOrNamespaceDeclarations decls currentModuleName isRecModule m
             collectAllBindingNamesAndFSRPCount decls
         else ([], -1) // this is never used
 
-    let declarationFolder ((mutualRecursionNamesMap, errors) : Map<string, string list> * string list) (declaration:  SynModuleDecl) =
+    let declarationFolder ((mutualRecursionNamesMap, errors) : Map<string, string list> * FSRPError list) (declaration:  SynModuleDecl) =
         match declaration with
         | SynModuleDecl.Let(isRec, bindings, range) ->
             // Let binding as a declaration is similar to let binding
@@ -260,7 +260,7 @@ let rec checkModuleOrNamespaceDeclarations decls currentModuleName isRecModule m
 
             let mutRecErrors = 
                 if (not isRecModule) && (fsrpCount > 0 && fsrpCount <> bindings.Length) then
-                    [$"%A{(formatErrorPrefix range)} Either all or no let bindings in mutual recusion block must have FSRP attribute"]
+                    [makeError "Either all or no let bindings in mutual recusion block must have FSRP attribute" range]
                 else []
 
             let moreMutualRecursionNamesMap = 
@@ -292,7 +292,7 @@ let rec checkModuleOrNamespaceDeclarations decls currentModuleName isRecModule m
         
     let recModuleErrors = 
         if isRecModule && (fullFsrpCount > 0) && (fullFsrpCount <> allDeclsRecFunNames.Length) then
-            [$"%A{(formatErrorPrefix moduleRange)} Either all or no let bindings in recursive module must have FSRP attribute"]
+            [makeError "Either all or no let bindings in recursive module must have FSRP attribute" moduleRange]
         else []
 
     let (mutRecInfo, errors) = List.fold declarationFolder (Map([]), []) decls
@@ -300,7 +300,7 @@ let rec checkModuleOrNamespaceDeclarations decls currentModuleName isRecModule m
 
 
 let checkModulesOrNamespaces (modulesOrNss : SynModuleOrNamespace list) =
-    let folder ((mutualRecursionNamesMaps, errors) : Map<string, string list> * string list) (modOrNs:  SynModuleOrNamespace) =
+    let folder ((mutualRecursionNamesMaps, errors) : Map<string, string list> * FSRPError list) (modOrNs:  SynModuleOrNamespace) =
         let (SynModuleOrNamespace(lid, isRec, isMod, decls, xml, attrs, _, moduleRange)) = modOrNs
         let (mutualRecursionNamesMaps', errors') = checkModuleOrNamespaceDeclarations decls (longIdentToString lid) isRec moduleRange
         (joinMaps mutualRecursionNamesMaps' mutualRecursionNamesMaps, List.append errors' errors)
@@ -309,14 +309,11 @@ let checkModulesOrNamespaces (modulesOrNss : SynModuleOrNamespace list) =
     res
        
 
-let topLevelMutualRecursionChecker (parseFileResults: FSharpParseFileResults) =
-    match parseFileResults.ParseTree with
-    | Some(parsedInput) -> 
-        match parsedInput with
-        | ParsedInput.ImplFile(parsedImplFileInput) ->
-            let (ParsedImplFileInput(fn, script, name, scopedPragmas, hashDirectives, modules, isLastCompiland)) = parsedImplFileInput
-            checkModulesOrNamespaces modules
-        | ParsedInput.SigFile(parsedSigFileInput) -> (Map([]), []) // signature files do not contain expressions (i think)
-    | _ -> failwith $"No parse tree available for file {parseFileResults.FileName}"
+let topLevelMutualRecursionChecker (parsedInput: ParsedInput) =
+    match parsedInput with
+    | ParsedInput.ImplFile(parsedImplFileInput) ->
+        let (ParsedImplFileInput(fn, script, name, scopedPragmas, hashDirectives, modules, isLastCompiland)) = parsedImplFileInput
+        checkModulesOrNamespaces modules
+    | ParsedInput.SigFile(parsedSigFileInput) -> (Map([]), []) // signature files do not contain expressions (i think)
 
   

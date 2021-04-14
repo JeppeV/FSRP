@@ -2,31 +2,11 @@
 
 open FSharp.Compiler.SourceCodeServices
 open FSharp.Core
-open FSharp.Compiler.Range
+open FSharp.Compiler.Text
 open Utility
+open FSRPError
 
 type EnvMap = Map<string,FSharpType>
-
-type FSRPErrorSeverity = 
-    | Warning
-    | Error
-
-type FSRPError (severity: FSRPErrorSeverity, message: string, range: range) =
-    member val severity = severity
-    member val message = message
-    member val range = range
-    override self.ToString() =
-        let severityString = 
-            match severity with 
-            | FSRPErrorSeverity.Warning -> "warning" 
-            | FSRPErrorSeverity.Error -> "error"
-        $"%s{range.FileName} %A{range.Start}-%A{range.End} FSRP %s{severityString}: %s{message}"
-        
-let makeWarning message range =
-    new FSRPError(FSRPErrorSeverity.Warning, message, range)
-
-let makeError message range = 
-    new FSRPError(FSRPErrorSeverity.Error, message, range)
 
 type Environment = {
     InFSRPFunction: bool
@@ -43,6 +23,8 @@ type Environment = {
 let fsrpCoreAccessPath = "FSRP.Core"
 let fsrpCoreUnstableTypeNames = ["Signal";"Event";"Later"]
 let fsrpCoreStableTypeNames = ["Box"]
+let fsrpCoreAttributeName = "FSRPAttribute"
+let fsrpCoreSignalTypeName = "Signal"
 
 let systemAccessPath = "System" 
 let systemTypeNames = [
@@ -73,8 +55,12 @@ type IsSignalFunctionResult =
     | No
     | Error of FSRPError
 
+
+let emptyMap () = Map([])
+
+
 let isTypeSignal (t: FSharpType) : bool =
-    t.HasTypeDefinition && t.TypeDefinition.AccessPath = fsrpCoreAccessPath && t.TypeDefinition.DisplayName = "Signal"
+    t.HasTypeDefinition && t.TypeDefinition.AccessPath = fsrpCoreAccessPath && t.TypeDefinition.DisplayName = fsrpCoreSignalTypeName
 
 let rec getReturnType(t: FSharpType) : FSharpType =
     if t.IsFunctionType then getReturnType (t.GenericArguments.Item(t.GenericArguments.Count - 1))
@@ -82,7 +68,7 @@ let rec getReturnType(t: FSharpType) : FSharpType =
 
 let isFSRPBinding (memberOrFunctionOrValue: FSharpMemberOrFunctionOrValue) : bool =
     (List.exists (fun (a : FSharpAttribute) -> 
-        a.AttributeType.AccessPath = fsrpCoreAccessPath && a.AttributeType.DisplayName = "FSRPAttribute"
+        a.AttributeType.AccessPath = fsrpCoreAccessPath && a.AttributeType.DisplayName = fsrpCoreAttributeName
     ) (List.ofSeq memberOrFunctionOrValue.Attributes))
 
 let isSignalFunction (memberOrFunctionOrValue: FSharpMemberOrFunctionOrValue) : IsSignalFunctionResult =
@@ -135,21 +121,19 @@ let rec isSignalType(t: FSharpType) : bool =
     if t.IsFunctionType then
         let returnType = t.GenericArguments.Item(t.GenericArguments.Count-1)
         isSignalType returnType
-    else if t.IsTupleType || t.IsStructTupleType || t.IsAnonRecordType || t.IsFunctionType then 
+    else if t.IsTupleType || t.IsStructTupleType || t.IsAnonRecordType then 
         List.fold (fun acc t -> (isSignalType t) || acc) false (Seq.toList t.GenericArguments)
     else if t.IsAbbreviation then isSignalType t.AbbreviatedType
     else if t.HasTypeDefinition then
         let accessPath = t.TypeDefinition.AccessPath
         let displayName = t.TypeDefinition.DisplayName
-        if accessPath = fsrpCoreAccessPath && displayName = "Signal" then
+        if accessPath = fsrpCoreAccessPath && displayName = fsrpCoreSignalTypeName then
             true
         else if t.GenericArguments.Count > 0 then
            List.fold (fun acc t -> (isSignalType t) || acc) false (Seq.toList t.GenericArguments)
         else false
     else false
 
-let isSignalFunctionType(t: FSharpType) : bool = 
-    t.IsFunctionType && (isSignalType (t.GenericArguments.Item (t.GenericArguments.Count-1)))
 
 let isInitialEnv (env: Environment) = not env.Now && not env.Later
 
@@ -247,30 +231,34 @@ let rec checkExpr (env: Environment) (e:FSharpExpr) : FSRPError list  =
         let fullName = memberOrFunc.FullName
         let exprLocation = e.Range
 
+        if memberOrFunc.DisplayName = "_delay" then
+            ()
+
+
         let objExprErrors = checkObjArg env objExprOpt
-        let (env', isTemporal, envErrorList) = 
+        let (env', envErrorList) = 
                 if fullName = delayFullName then
                     if isNowEnv env then  
                         ({ env with 
                             Later = true;
-                        }, true, [])
+                        }, [])
                     else 
-                        (env, true, [makeError $"{delayFullName} cannot appear outside a NOW context" exprLocation])
+                        (env, [makeError $"{delayFullName} cannot appear outside a NOW context" exprLocation])
                 else if fullName = advFullName then
                         if isLaterEnv env then  
                             ({ env with 
                                 Later = false;
-                            }, true, [])   
+                            }, [])   
                         else 
-                            (env, true, [makeError $"{advFullName} cannot appear outside a LATER context" exprLocation])
+                            (env, [makeError $"{advFullName} cannot appear outside a LATER context" exprLocation])
                 else if fullName = boxFullName then
                     if isInitialEnv env then
                         ({ env with 
                             Now = true;
                             Later = false;
-                        }, true, [])  
+                        }, [])  
                     else 
-                        (env, true, [makeError $"{boxFullName} cannot appear outside an INITIAL context" exprLocation])
+                        (env, [makeError $"{boxFullName} cannot appear outside an INITIAL context" exprLocation])
                 //else if fullName = unboxFullName then
                     //if isNowEnv env then
                     //    printfn "%s" "ENTERING UNBOX"
@@ -286,9 +274,9 @@ let rec checkExpr (env: Environment) (e:FSharpExpr) : FSRPError list  =
                         let unstableArgsErrors = if argsAreUnstable then [makeError $"Arguments to {progressFullName} must be known to be stable" exprLocation] else []
                         ({ env with 
                             Later = false;
-                        }, true, unstableArgsErrors)   
+                        }, unstableArgsErrors)   
                     else 
-                        (env, true, [makeError $"{progressFullName} cannot appear outside a LATER context" exprLocation])
+                        (env, [makeError $"{progressFullName} cannot appear outside a LATER context" exprLocation])
                 else if fullName = promoteFullName then
                     if isNowEnv env then
                         let argsAreUnstable = isUnstableTypes (List.map (fun (e: FSharpExpr) -> e.Type) argExprs)
@@ -296,20 +284,19 @@ let rec checkExpr (env: Environment) (e:FSharpExpr) : FSRPError list  =
                         ({ env with 
                             Now = false
                             Later = false;
-                        }, true, unstableArgsErrors)
+                        }, unstableArgsErrors)
                             
                     else
-                        (env, true, [makeError $"{promoteFullName} cannot appear outside a NOW context" exprLocation])
+                        (env, [makeError $"{promoteFullName} cannot appear outside a NOW context" exprLocation])
                 else 
-                    (env, false, [])
+                    (env, [])
 
-        let lookupErrorList = if not isTemporal then 
-                                match canLookup env memberOrFunc e.Range with
-                                | CanLookupResult.No(error) -> [error]
-                                | CanLookupResult.Yes -> []
-                               else []
-        
-        List.append objExprErrors (List.append envErrorList (List.append lookupErrorList (checkExprs env' argExprs)))         
+        let lookupErrorList = 
+            match canLookup env memberOrFunc e.Range with
+            | CanLookupResult.No(error) -> [error]
+            | CanLookupResult.Yes -> []
+                                 
+        appendMany [objExprErrors; envErrorList; lookupErrorList; (checkExprs env' argExprs)]
         
     | BasicPatterns.Coerce(targetType, inpExpr) ->
         checkExpr env inpExpr
@@ -431,8 +418,6 @@ and checkObjArg (env: Environment) objOpt : FSRPError list  =
 
 and checkObjMember (env: Environment) memb : FSRPError list  =
     checkExpr env memb.Body 
-
-let emptyMap () = Map([])
 
 let argsToEnvs (args: FSharpMemberOrFunctionOrValue list) =
     let folder = (fun ((args, argsCG) : EnvMap * EnvMap) (a: FSharpMemberOrFunctionOrValue) ->

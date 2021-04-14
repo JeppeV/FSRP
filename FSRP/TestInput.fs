@@ -15,6 +15,6 @@ and test3 =
     ""
 
 
-let rec test4 (s: Signal<int>) x = match s with | hd :: tl -> hd :: delay(lazy((test4 (adv tl) x)))
+let rec test4 (s: Signal<int>) x = match s with | hd :: tl -> hd :: delay((test4 (adv tl) x))
 
 

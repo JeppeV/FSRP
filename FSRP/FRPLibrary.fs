@@ -1,19 +1,17 @@
 ﻿namespace FSRP
 
-    open System.Collections
     open System
-    open System.Collections.Generic
 
     module Core =
 
         type private Store() =
-            member val nowHeap = new List<obj>() with get, set
-            member val laterHeap = new List<obj>() with get, set
+            member val nowHeap = new ResizeArray<obj>() with get, set
+            member val laterHeap = new ResizeArray<obj>() with get, set
             member this.tick () =
-                let reuseHeap = this.nowHeap
-                reuseHeap.Clear()
+                let newLaterHeap = this.nowHeap
+                newLaterHeap.Clear()
                 this.nowHeap <- this.laterHeap
-                this.laterHeap <- reuseHeap
+                this.laterHeap <- newLaterHeap
 
         let private store = new Store()
 
@@ -193,7 +191,7 @@
             inner1
 
 
-        [<FSRP>]
+        [<FSRP>] // why does this one work? should it?
         let test2 () = 
             let rec inner2 () : int = 
                 1 + (inner2 ())
@@ -262,6 +260,11 @@
         let rec ruin_gc (i: int) : Signal<int> =
             let stack_frame = i + 2
             i :: delay(lazy(ruin_gc stack_frame))
+
+        [<FSRP>]
+        let wrapper_test () =
+            Wrapper(nats) // is this a signal function?
+
 
 
 

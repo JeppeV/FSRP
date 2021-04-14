@@ -3,6 +3,7 @@
 open System.IO
 open FSharp.Compiler.SourceCodeServices
 open FSharp.Compiler.Text
+open System.Xml
 
 // Create an interactive checker instance
 let checker = FSharpChecker.Create(keepAssemblyContents=true)
@@ -16,7 +17,7 @@ let getProjectOptions mainFile allFiles =
         checker.GetProjectOptionsFromScript(mainFile, mainSource, assumeDotNetFramework = false)
         |> Async.RunSynchronously
     
-    let upatedProjOptions = { projOptions with SourceFiles = List.toArray allFiles; OtherOptions = Array.append projOptions.OtherOptions [|"--optimize-"|] } 
+    let upatedProjOptions = { projOptions with SourceFiles = List.toArray allFiles(*; OtherOptions = Array.append projOptions.OtherOptions [|"--optimize-"|] *)} 
     upatedProjOptions
 
 [<EntryPoint>]
@@ -24,6 +25,10 @@ let main argv =
 
     // Sample input for the compiler service
     let files = ["FRPLibrary.fs"]
+
+    let docMusicCollection : XmlDocument = new XmlDocument()
+    
+    //docMusicCollection.Load "music.xml"
 
     let mainFile = files.Item(files.Length - 1)
     let projectOptions = getProjectOptions mainFile files
@@ -34,6 +39,8 @@ let main argv =
         let source = SourceText.ofString (File.ReadAllText(filename))
         (source, filename)
         ) files)
+
+    printfn "ProjectOptions: %A" projectOptions
 
     let parseAndTypeCheckResultsAndFilenames =
         (List.map (fun (source: ISourceText, filename: string) ->
@@ -65,10 +72,10 @@ let main argv =
 
         let (fsharpTypeCheckWarnings, fsharpTypeCheckErrors) =
             (List.fold (fun ((warnings, errors)) ((_, checkFileResults, _) : FSharpParseFileResults * FSharpCheckFileResults * string)  ->
-                let errorFilter severity (e: FSharpErrorInfo) = severity = e.Severity
+                let errorFilter severity (e: FSharpDiagnostic) = severity = e.Severity
                 let errorList = Array.toList checkFileResults.Errors
-                let newWarnings = (List.filter (errorFilter FSharpErrorSeverity.Warning) errorList)
-                let newErrors = (List.filter (errorFilter FSharpErrorSeverity.Error) errorList)
+                let newWarnings = (List.filter (errorFilter FSharpDiagnosticSeverity.Warning) errorList)
+                let newErrors = (List.filter (errorFilter FSharpDiagnosticSeverity.Error) errorList)
                 (List.append newWarnings warnings, List.append newErrors errors)
             ) ([], []) fsharpTypecheckResultsAllSucceeded)
 
@@ -85,7 +92,10 @@ let main argv =
 
             let mutualRecursionNamesMapResults = 
                 (List.map (fun (parseFileResult: FSharpParseFileResults, checkFileResults: FSharpCheckFileResults, filename: string) ->
-                    let (mutualRecursionNamesMap, errors) = PurityChecker.topLevelMutualRecursionChecker parseFileResult
+                    let (mutualRecursionNamesMap, errors) =
+                        match parseFileResult.ParseTree with 
+                        | Some(parsedInput) -> MutualRecusionChecker.topLevelMutualRecursionChecker parsedInput
+                        | _ -> failwith $"Missing parse tree for file {filename}"
                     ((parseFileResult, checkFileResults, filename, mutualRecursionNamesMap), errors)
                 ) fsharpTypecheckResultsAllSucceeded)
 
@@ -124,7 +134,7 @@ let main argv =
                     let (errors, exitCode) = checker.Compile(asts, "out.dll", "out.exe", [], "", false, false, "") |> Async.RunSynchronously
                     printfn "%A" "Compilation errors:"
                     if errors.Length > 0 then
-                        (List.iter (fun (pe: FSharpErrorInfo) ->
+                        (List.iter (fun (pe: FSharpDiagnostic) ->
                             printfn "%A" pe
                         ) (Array.toList errors))
                         exitCode

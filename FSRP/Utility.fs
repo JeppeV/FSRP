@@ -1,6 +1,6 @@
 ﻿module Utility
 
-open FSharp.Compiler.Range
+open FSharp.Compiler.Text
 
 let rec appendMany (ls: 'a list list) =
     match ls with

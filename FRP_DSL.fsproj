@@ -6,15 +6,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="Utility.fs" />
+    <Compile Include="MutualRecursionChecker.fs" />
     <Compile Include="SimplyRaTTChecker.fs" />
-    <Compile Include="ASTConverter.fs" />
     <Compile Include="FRPLibrary.fs">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Compile>
-    <Compile Include="TestInput.fs">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Compile>
-    <Compile Include="Program2.fs" />
     <Compile Include="FRPLibraryTest.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>

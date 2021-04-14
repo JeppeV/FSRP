@@ -216,8 +216,8 @@
 
         [<FSRP>]
         let rec test10 x =  
-            let rec sf y =
-                y::delay(lazy(test10 x x))
+            let rec sf (y : string) =
+                y::delay(lazy(sf y))
             sf
 
 

@@ -337,9 +337,8 @@ let rec checkExpr (env: Environment) (e:FSharpExpr) : FSRPError list  =
             if env.InFSRPFunction then
                 (List.fold (fun (c, ers) ((b, e): FSharpMemberOrFunctionOrValue * FSharpExpr) ->    
                     match isSignalFunction b with
-                    | Yes -> printfn "inner signalF is: %A" b.LogicalName; (c + 1, ers)
-                    | YesLater -> (c, ers)
-                    | No -> (c, ers)
+                    | Yes -> (c + 1, ers)
+                    | YesLater | No -> (c, ers)
                     | Error(err) -> (c, List.append [err] ers)
                 ) (0, []) recursiveBindings)
             else (0, [])

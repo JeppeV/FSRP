@@ -5,7 +5,7 @@ VisualStudioVersion = 16.0.30804.86
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "FRP_DSL", "FSRP\FRP_DSL.fsproj", "{855F83DA-522B-49EC-BBF4-AB6FB2A2E661}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Driver", "Driver\Driver.fsproj", "{D4041880-E11B-4917-A6E3-5BCC5ED5631E}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Driver", "Driver\Driver.fsproj", "{D4041880-E11B-4917-A6E3-5BCC5ED5631E}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

@@ -22,10 +22,14 @@ let getProjectOptions mainFile allFiles =
 
 [<EntryPoint>]
 let main argv =
-
     // Sample input for the compiler service
     let files = ["FRPLibrary.fs"]
 
+    let toolsPath = Ionide.ProjInfo.Init.init ()
+    let workspaceLoader = Ionide.ProjInfo.WorkspaceLoader.Create toolsPath
+    let projectOptions =  workspaceLoader.LoadSln (System.Environment.CurrentDirectory + "\..\..\..\..\FRP_DSL.sln")
+    let fcsProjectOptions = Seq.toList (Seq.map (fun po -> Ionide.ProjInfo.FCS.mapToFSharpProjectOptions po projectOptions) projectOptions)
+ 
     let docMusicCollection : XmlDocument = new XmlDocument()
     
     //docMusicCollection.Load "music.xml"

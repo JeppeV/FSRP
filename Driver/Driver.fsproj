@@ -11,10 +11,17 @@
 
   <ItemGroup>
     <PackageReference Include="FSharp.Compiler.Service" Version="39.0.0" />
+    <PackageReference Include="FSharp.Compiler.Service.ProjectCracker" Version="33.0.1" />
+    <PackageReference Include="Ionide.ProjInfo" Version="0.51.0" />
+    <PackageReference Include="Ionide.ProjInfo.FCS" Version="0.51.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\FSRP\FRP_DSL.fsproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Update="FSharp.Core" Version="5.0.1" />
   </ItemGroup>
 
 </Project>

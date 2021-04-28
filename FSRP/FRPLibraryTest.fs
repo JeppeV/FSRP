@@ -9,16 +9,16 @@ let genRandomNumbers count =
     let rnd = System.Random()
     List.init count (fun _ -> rnd.Next (10000))
 
-let test_signal = ruin_gc 1337
+let test_signal = test (box (lazy(delay(lazy(1)))))
 
-//[<EntryPoint>]
+[<EntryPoint>]
 let main argv =
     let mutable i = 0
     let input () = 
          (genRandomNumbers 10)
 
 
-    let output (current: int) = printfn "%A" current
+    let output (current: int) = printfn "%A" current; true
         //if current % 10 = 0 then printfn "%A" current
     
 

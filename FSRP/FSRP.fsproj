@@ -1,0 +1,32 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net5.0</TargetFramework>
+    <VersionPrefix>1.0.6</VersionPrefix>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="FSRPError.fs" />
+    <Compile Include="Utility.fs" />
+    <Compile Include="MutualRecursionChecker.fs" />
+    <Compile Include="SimplyRaTTChecker.fs" />
+    <Compile Include="FRPLibrary.fs">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Compile>
+    <Compile Include="TestInput.fs">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Compile>
+    <Compile Include="FRPLibraryTest.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Ionide.ProjInfo" Version="0.52.0" />
+    <PackageReference Include="Ionide.ProjInfo.FCS" Version="0.52.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Update="FSharp.Core" Version="5.0.1" />
+  </ItemGroup>
+
+</Project>

@@ -10,14 +10,12 @@ type EnvMap = Map<string,FSharpType>
 
 type Environment = {
     InFSRPFunction: bool
+    InBox: bool
     InitialEnv: EnvMap
-    InitialEnvCG: EnvMap
     Now: bool
     NowEnv: EnvMap
-    NowEnvCG: EnvMap
     Later: bool
     LaterEnv: EnvMap
-    LaterEnvCG: EnvMap
 } 
 
 let fsrpCoreAccessPath = "FSRP.Core"
@@ -134,32 +132,20 @@ let rec isSignalType(t: FSharpType) : bool =
         else false
     else false
 
-
 let isInitialEnv (env: Environment) = not env.Now && not env.Later
 
 let isNowEnv (env: Environment) = env.Now && not env.Later
 
 let isLaterEnv (env: Environment) = env.Now && env.Later
 
-
 let addToInitialEnv (env: Environment) (s: FSharpMemberOrFunctionOrValue) =
-    if s.IsCompilerGenerated then
-        { env with InitialEnvCG = env.InitialEnvCG.Add(s.LogicalName, s.FullType) }
-    else
-        { env with InitialEnv = env.InitialEnv.Add(s.LogicalName, s.FullType) }
+    { env with InitialEnv = env.InitialEnv.Add(s.LogicalName, s.FullType) }
 
 let addToNowEnv (env: Environment) (s: FSharpMemberOrFunctionOrValue) =
-    if s.IsCompilerGenerated then
-        { env with NowEnvCG = env.NowEnvCG.Add(s.LogicalName, s.FullType) }
-    else
-        { env with NowEnv = env.NowEnv.Add(s.LogicalName, s.FullType) }
+    { env with NowEnv = env.NowEnv.Add(s.LogicalName, s.FullType) }
 
 let addToLaterEnv (env: Environment) (s: FSharpMemberOrFunctionOrValue) =
-    if s.IsCompilerGenerated then
-        { env with LaterEnvCG = env.LaterEnvCG.Add(s.LogicalName, s.FullType) }
-    else
-        { env with LaterEnv = env.LaterEnv.Add(s.LogicalName, s.FullType) }
-
+    { env with LaterEnv = env.LaterEnv.Add(s.LogicalName, s.FullType) }
 
 let addSymbolToCurrentEnv (env: Environment) (s: FSharpMemberOrFunctionOrValue) : Environment =
     if isLaterEnv env then
@@ -181,35 +167,39 @@ let canLookup (env: Environment) (s: FSharpMemberOrFunctionOrValue) (loc: range)
     let sName = s.LogicalName
     let sLocation = loc
     let typeIsStable = not (isUnstableType s.FullType)
+    let canLookupUnstableInCurrentEnv = not env.InBox
     if isLaterEnv env then
-        if envContains env.LaterEnv sName || envContains env.LaterEnvCG sName then
-            CanLookupResult.Yes
-        else if envContains env.NowEnv sName || envContains env.NowEnvCG sName then
+        if envContains env.LaterEnv sName then
+            if canLookupUnstableInCurrentEnv || typeIsStable then CanLookupResult.Yes
+            else CanLookupResult.No(makeError $"Cannot access unstable variable {s.LogicalName} in current context" sLocation)
+        else if envContains env.NowEnv sName then
             if typeIsStable then CanLookupResult.Yes
             else CanLookupResult.No(makeError $"Cannot access variable {s.LogicalName} in a LATER context, as it is only accessible in a NOW context" sLocation)
-        else if envContains env.InitialEnv sName || envContains env.InitialEnvCG sName then
+        else if envContains env.InitialEnv sName then
             if typeIsStable then CanLookupResult.Yes
             else CanLookupResult.No(makeError $"Cannot access variable {s.LogicalName} in a LATER context, as it is only accessible in an INITIAL context" sLocation)
         else CanLookupResult.Yes
             //if typeIsStable then CanLookupResult.Yes
             //else YesBut(makeWarning $"Accessing unstable variable {s.LogicalName}, which is not tracked by FSRP, may lead to space or time leaks" sLocation)
     else if isNowEnv env then
-        if envContains env.LaterEnv sName || envContains env.LaterEnvCG sName then
+        if envContains env.LaterEnv sName then
             CanLookupResult.No(makeError $"Cannot access variable {s.LogicalName} in a NOW context, as it is only accessible in a LATER context" sLocation)
-        else if envContains env.NowEnv sName || envContains env.NowEnvCG sName then
-            CanLookupResult.Yes
-        else if envContains env.InitialEnv sName || envContains env.InitialEnvCG sName then
+        else if envContains env.NowEnv sName then
+            if canLookupUnstableInCurrentEnv || typeIsStable then CanLookupResult.Yes
+            else CanLookupResult.No(makeError $"Cannot access unstable variable {s.LogicalName} in current context" sLocation)
+        else if envContains env.InitialEnv sName then
             if typeIsStable then CanLookupResult.Yes
             else CanLookupResult.No(makeError $"Cannot access variable {s.LogicalName} in a NOW context, as it is only accessible in an INITIAL context" sLocation)
         else 
             CanLookupResult.Yes
     else if isInitialEnv env then
-        if envContains env.LaterEnv sName || envContains env.LaterEnvCG sName then 
+        if envContains env.LaterEnv sName then 
             CanLookupResult.No(makeError $"Cannot access variable {s.LogicalName} in a INITIAL context, as it is only accessible in a LATER context" sLocation)
-        else if envContains env.NowEnv sName || envContains env.NowEnvCG sName then
+        else if envContains env.NowEnv sName then
                 CanLookupResult.No(makeError $"Cannot access variable {s.LogicalName} in a INITIAL context, as it is only accessible in a NOW context" sLocation)
-        else if envContains env.InitialEnv sName || envContains env.InitialEnvCG sName then
-            CanLookupResult.Yes
+        else if envContains env.InitialEnv sName then
+            if canLookupUnstableInCurrentEnv || typeIsStable then CanLookupResult.Yes
+            else CanLookupResult.No(makeError $"Cannot access unstable variable {s.LogicalName} in current context" sLocation)
         else 
             CanLookupResult.Yes
     else 
@@ -231,10 +221,6 @@ let rec checkExpr (env: Environment) (e:FSharpExpr) : FSRPError list  =
         let fullName = memberOrFunc.FullName
         let exprLocation = e.Range
 
-        if memberOrFunc.DisplayName = "_delay" then
-            ()
-
-
         let objExprErrors = checkObjArg env objExprOpt
         let (env', envErrorList) = 
                 if fullName = delayFullName then
@@ -252,13 +238,11 @@ let rec checkExpr (env: Environment) (e:FSharpExpr) : FSRPError list  =
                         else 
                             (env, [makeError $"{advFullName} cannot appear outside a LATER context" exprLocation])
                 else if fullName = boxFullName then
-                    if isInitialEnv env then
-                        ({ env with 
-                            Now = true;
-                            Later = false;
-                        }, [])  
-                    else 
-                        (env, [makeError $"{boxFullName} cannot appear outside an INITIAL context" exprLocation])
+                    ({ env with 
+                        InBox = true;
+                        Now = true;
+                        Later = false;
+                    }, [])  
                 //else if fullName = unboxFullName then
                     //if isNowEnv env then
                     //    printfn "%s" "ENTERING UNBOX"
@@ -318,8 +302,7 @@ let rec checkExpr (env: Environment) (e:FSharpExpr) : FSRPError list  =
     | BasicPatterns.Let((bindingVar, bindingExpr), bodyExpr) ->
         List.append (checkExpr env bindingExpr) (checkExpr (addSymbolToCurrentEnv env bindingVar) bodyExpr)
     | BasicPatterns.LetRec(recursiveBindings, bodyExpr) ->
-        let bindingMemberOrFuncOrVals = (List.map fst recursiveBindings)
-        let recBindingNames = (List.map (fun (b: FSharpMemberOrFunctionOrValue) ->  b.LogicalName) bindingMemberOrFuncOrVals)
+        let recursiveBindingsMemberOrFuncOrVals = (List.map fst recursiveBindings)
         let (signalFunctionCount, errors) = 
             if env.InFSRPFunction then
                 (List.fold (fun (c, ers) ((b, e): FSharpMemberOrFunctionOrValue * FSharpExpr) ->    
@@ -333,7 +316,7 @@ let rec checkExpr (env: Environment) (e:FSharpExpr) : FSRPError list  =
             if signalFunctionCount > 0 then
                 if signalFunctionCount = recursiveBindings.Length then
                     let signalFunEnv = { env with Now = true; }
-                    let signalFunEnvWithFunNames = List.fold addToLaterEnv signalFunEnv bindingMemberOrFuncOrVals
+                    let signalFunEnvWithFunNames = List.fold addToLaterEnv signalFunEnv recursiveBindingsMemberOrFuncOrVals
                     (List.collect (fun (_, expr) -> checkExpr signalFunEnvWithFunNames expr) recursiveBindings)
                 else 
                     [makeError $"Either all or no functions are signal functions in mutually recursive block" e.Range]
@@ -419,28 +402,22 @@ and checkObjArg (env: Environment) objOpt : FSRPError list  =
 and checkObjMember (env: Environment) memb : FSRPError list  =
     checkExpr env memb.Body 
 
-let argsToEnvs (args: FSharpMemberOrFunctionOrValue list) =
-    let folder = (fun ((args, argsCG) : EnvMap * EnvMap) (a: FSharpMemberOrFunctionOrValue) ->
-        if a.IsCompilerGenerated then
-            (args, addToEnv argsCG a)
-        else 
-            (addToEnv args a, argsCG)
+let argsToEnv (args: FSharpMemberOrFunctionOrValue list) =
+    let folder = (fun (env : EnvMap) (a: FSharpMemberOrFunctionOrValue) ->
+        addToEnv env a
     )
-    (List.fold folder (emptyMap(), emptyMap()) args)
+    (List.fold folder (emptyMap()) args)
 
 let defaultEnv : Environment = 
     {
         InFSRPFunction = false;
+        InBox = false;
         InitialEnv = emptyMap ()
-        InitialEnvCG = emptyMap ()
         Now = false;
         NowEnv = emptyMap ()
-        NowEnvCG = emptyMap ()
         Later = false;
         LaterEnv = emptyMap ()
-        LaterEnvCG = emptyMap ()
     }
-
 
 let checkMemberOrFunctionOrValue (memberOrFuncOrValue: FSharpMemberOrFunctionOrValue) (args: FSharpMemberOrFunctionOrValue list list) (body: FSharpExpr) (mutualRecursionNamesMap : Map<string, string list>) (mutualRecursionMFVMap: Map<string, FSharpMemberOrFunctionOrValue>) = 
     
@@ -456,7 +433,7 @@ let checkMemberOrFunctionOrValue (memberOrFuncOrValue: FSharpMemberOrFunctionOrV
             List.fold folder [] recNames
         | _ -> [] // declaration is not recursive
 
-    let (argsEnv, argsEnvCG) = argsToEnvs (List.collect (fun l -> l) args)   
+    let argsEnv = argsToEnv (List.collect (fun l -> l) args)   
        
     let (env, signalFuncErrors) = 
         if isFSRPBinding then 
@@ -466,14 +443,12 @@ let checkMemberOrFunctionOrValue (memberOrFuncOrValue: FSharpMemberOrFunctionOrV
                     InFSRPFunction = true
                     Now = true;
                     NowEnv = argsEnv;
-                    NowEnvCG = argsEnvCG;
                     LaterEnv = List.fold (fun env memberOrFunvOrVal -> addToEnv env memberOrFunvOrVal) (emptyMap ()) recMemberOrFuncOrVals
                 }, [])
             | YesLater ->
                 ({ defaultEnv with  
                     InFSRPFunction = true
                     InitialEnv = addToEnv argsEnv memberOrFuncOrValue
-                    InitialEnvCG = argsEnvCG
                 }, [])
             | Error(error) -> (defaultEnv, [error])
         else 
@@ -487,8 +462,6 @@ let checkMemberOrFunctionOrValue (memberOrFuncOrValue: FSharpMemberOrFunctionOrV
         else checkExpr env body
     (List.append signalFuncErrors exprError)
     
-
-
 let rec checkDeclarations (declarations: FSharpImplementationFileDeclaration list) (mutualRecursionNamesMap : Map<string, string list>) (mutualRecursionMFVMap: Map<string, FSharpMemberOrFunctionOrValue>) : FSRPError list =
     (List.collect (fun d ->  checkDeclaration d mutualRecursionNamesMap mutualRecursionMFVMap) declarations)
 
@@ -499,8 +472,6 @@ and checkDeclaration (declaration: FSharpImplementationFileDeclaration) (mutualR
     | FSharpImplementationFileDeclaration.MemberOrFunctionOrValue(memberOrFuncOrVal, args, body) ->
         checkMemberOrFunctionOrValue memberOrFuncOrVal args body mutualRecursionNamesMap mutualRecursionMFVMap
     | FSharpImplementationFileDeclaration.InitAction(initExpr) -> checkExpr defaultEnv initExpr
-
-
 
 let rec bundleDeclarations (declarations: FSharpImplementationFileDeclaration list) (mutualRecursionNamesMap : Map<string, string list>) (mutualRecursionMFVMap: Map<string, FSharpMemberOrFunctionOrValue>) : Map<string, FSharpMemberOrFunctionOrValue>  =
     (List.fold (fun acc decl ->  bundleDeclaration decl mutualRecursionNamesMap acc) mutualRecursionMFVMap declarations)

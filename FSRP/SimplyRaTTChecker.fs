@@ -6,12 +6,12 @@ open FSharp.Compiler.Text
 open Utility
 open FSRPError
 
-type EnvMap = Map<string,FSharpType>
+type EnvMap = Map<string, FSharpType * bool>
+
+
 
 type Environment = {
     InFSRPFunction: bool
-    InBox: bool
-    InitialEnv: EnvMap
     Now: bool
     NowEnv: EnvMap
     Later: bool
@@ -54,6 +54,9 @@ type IsSignalFunctionResult =
     | Error of FSRPError
 
 
+
+
+
 let emptyMap () = Map([])
 
 
@@ -69,30 +72,30 @@ let isFSRPBinding (memberOrFunctionOrValue: FSharpMemberOrFunctionOrValue) : boo
         a.AttributeType.AccessPath = fsrpCoreAccessPath && a.AttributeType.DisplayName = fsrpCoreAttributeName
     ) (List.ofSeq memberOrFunctionOrValue.Attributes))
 
-let isSignalFunction (memberOrFunctionOrValue: FSharpMemberOrFunctionOrValue) : IsSignalFunctionResult =
+//let isSignalFunction (memberOrFunctionOrValue: FSharpMemberOrFunctionOrValue) : IsSignalFunctionResult =
 
-    let acceptsArgs = memberOrFunctionOrValue.CurriedParameterGroups.Count > 0
+//    let acceptsArgs = memberOrFunctionOrValue.CurriedParameterGroups.Count > 0
 
-    let rec computeBodyType (ty : FSharpType) (c: int) = 
-        if c > 0 then
-            computeBodyType (ty.GenericArguments.Item(ty.GenericArguments.Count - 1)) (c - 1)
-        else
-            ty
+//    let rec computeBodyType (ty : FSharpType) (c: int) = 
+//        if c > 0 then
+//            computeBodyType (ty.GenericArguments.Item(ty.GenericArguments.Count - 1)) (c - 1)
+//        else
+//            ty
            
-    let bodyType = computeBodyType memberOrFunctionOrValue.FullType (memberOrFunctionOrValue.CurriedParameterGroups.Count)
-    let bodyIsSignal = isTypeSignal bodyType 
-    let bodyIsFunction = bodyType.IsFunctionType
-    let bodyFunctionReturnType = getReturnType bodyType
-    let bodyReturnTypeIsSignal = isTypeSignal bodyFunctionReturnType
-    if bodyIsSignal then 
-        if acceptsArgs then
-            Yes
-        else    
-            Error(makeError "Signal functions directly returning a Signal must accept at least 1 argument (can be unit)" memberOrFunctionOrValue.DeclarationLocation)
-    else if bodyIsFunction && bodyReturnTypeIsSignal then
-        YesLater
-    else 
-        No
+//    let bodyType = computeBodyType memberOrFunctionOrValue.FullType (memberOrFunctionOrValue.CurriedParameterGroups.Count)
+//    let bodyIsSignal = isTypeSignal bodyType 
+//    let bodyIsFunction = bodyType.IsFunctionType
+//    let bodyFunctionReturnType = getReturnType bodyType
+//    let bodyReturnTypeIsSignal = isTypeSignal bodyFunctionReturnType
+//    if bodyIsSignal then 
+//        if acceptsArgs then
+//            Yes
+//        else    
+//            Error(makeError "Signal functions directly returning a Signal must accept at least 1 argument (can be unit)" memberOrFunctionOrValue.DeclarationLocation)
+//    else if bodyIsFunction && bodyReturnTypeIsSignal then
+//        YesLater
+//    else 
+//        No
 
 let rec isUnstableType(t: FSharpType) : bool =
     if t.IsFunctionType then true
@@ -132,20 +135,18 @@ let rec isSignalType(t: FSharpType) : bool =
         else false
     else false
 
-let isInitialEnv (env: Environment) = not env.Now && not env.Later
-
 let isNowEnv (env: Environment) = env.Now && not env.Later
 
 let isLaterEnv (env: Environment) = env.Now && env.Later
 
-let addToInitialEnv (env: Environment) (s: FSharpMemberOrFunctionOrValue) =
-    { env with InitialEnv = env.InitialEnv.Add(s.LogicalName, s.FullType) }
+//let addToInitialEnv (env: Environment) (s: FSharpMemberOrFunctionOrValue) =
+//    { env with InitialEnv = env.InitialEnv.Add(s.LogicalName, s.FullType) }
 
 let addToNowEnv (env: Environment) (s: FSharpMemberOrFunctionOrValue) =
-    { env with NowEnv = env.NowEnv.Add(s.LogicalName, s.FullType) }
+    { env with NowEnv = env.NowEnv.Add(s.LogicalName, (s.FullType, true)) }
 
 let addToLaterEnv (env: Environment) (s: FSharpMemberOrFunctionOrValue) =
-    { env with LaterEnv = env.LaterEnv.Add(s.LogicalName, s.FullType) }
+    { env with LaterEnv = env.LaterEnv.Add(s.LogicalName, (s.FullType, true)) }
 
 let addSymbolToCurrentEnv (env: Environment) (s: FSharpMemberOrFunctionOrValue) : Environment =
     if isLaterEnv env then
@@ -153,52 +154,58 @@ let addSymbolToCurrentEnv (env: Environment) (s: FSharpMemberOrFunctionOrValue) 
     else if isNowEnv env then
         addToNowEnv env s
     else 
-        addToInitialEnv env s
+        env
+    
+    //else if isNowEnv env then
+    //    addToNowEnv env s
+    //else 
+    //    addToInitialEnv env s
 
-let addToEnv (env: Map<string,FSharpType>) (s: FSharpMemberOrFunctionOrValue) =
-    env.Add(s.LogicalName, s.FullType)
+let addToEnv (env: EnvMap) (s: FSharpMemberOrFunctionOrValue) =
+    env.Add(s.LogicalName, (s.FullType, true))
 
-let envContains (env: Map<string,FSharpType>) (s: string) =
+let envContains (env: EnvMap) (s: string) =
     match env.TryFind s with
     | Some(_) -> true
     | None -> false
 
+let stabilizeEnv (envMap: EnvMap) : EnvMap =
+    Map.fold (fun acc name (fsharpType, visible) -> 
+        (acc.Add (name, (fsharpType, (not (isUnstableType fsharpType)))))      
+    ) (emptyMap ()) envMap
+
+let hideUnstableVariables (env: Environment) : Environment =
+    if isNowEnv env then
+        let stableNowEnv = stabilizeEnv env.NowEnv
+        { env with NowEnv = stableNowEnv }
+    else if isLaterEnv env then
+        let stableLaterEnv = stabilizeEnv env.LaterEnv
+        { env with LaterEnv = stableLaterEnv }
+    else
+        env
+        
 let canLookup (env: Environment) (s: FSharpMemberOrFunctionOrValue) (loc: range) : CanLookupResult =
     let sName = s.LogicalName
+
     let sLocation = loc
     let typeIsStable = not (isUnstableType s.FullType)
-    let canLookupUnstableInCurrentEnv = not env.InBox
+    let mutable lookupRef : FSharpType * bool = (s.FullType, true)
     if isLaterEnv env then
-        if envContains env.LaterEnv sName then
-            if canLookupUnstableInCurrentEnv || typeIsStable then CanLookupResult.Yes
+        if env.LaterEnv.TryGetValue (sName, &lookupRef) then
+            let (_, isVisible) = lookupRef
+            if isVisible then CanLookupResult.Yes
             else CanLookupResult.No(makeError $"Cannot access unstable variable {s.LogicalName} in current context" sLocation)
-        else if envContains env.NowEnv sName then
-            if typeIsStable then CanLookupResult.Yes
+        else if env.NowEnv.TryGetValue (sName, &lookupRef) then
+            let (_, isVisible) = lookupRef
+            if isVisible && typeIsStable then CanLookupResult.Yes
             else CanLookupResult.No(makeError $"Cannot access variable {s.LogicalName} in a LATER context, as it is only accessible in a NOW context" sLocation)
-        else if envContains env.InitialEnv sName then
-            if typeIsStable then CanLookupResult.Yes
-            else CanLookupResult.No(makeError $"Cannot access variable {s.LogicalName} in a LATER context, as it is only accessible in an INITIAL context" sLocation)
         else CanLookupResult.Yes
-            //if typeIsStable then CanLookupResult.Yes
-            //else YesBut(makeWarning $"Accessing unstable variable {s.LogicalName}, which is not tracked by FSRP, may lead to space or time leaks" sLocation)
     else if isNowEnv env then
-        if envContains env.LaterEnv sName then
+        if env.LaterEnv.TryGetValue (sName, &lookupRef) then
             CanLookupResult.No(makeError $"Cannot access variable {s.LogicalName} in a NOW context, as it is only accessible in a LATER context" sLocation)
-        else if envContains env.NowEnv sName then
-            if canLookupUnstableInCurrentEnv || typeIsStable then CanLookupResult.Yes
-            else CanLookupResult.No(makeError $"Cannot access unstable variable {s.LogicalName} in current context" sLocation)
-        else if envContains env.InitialEnv sName then
-            if typeIsStable then CanLookupResult.Yes
-            else CanLookupResult.No(makeError $"Cannot access variable {s.LogicalName} in a NOW context, as it is only accessible in an INITIAL context" sLocation)
-        else 
-            CanLookupResult.Yes
-    else if isInitialEnv env then
-        if envContains env.LaterEnv sName then 
-            CanLookupResult.No(makeError $"Cannot access variable {s.LogicalName} in a INITIAL context, as it is only accessible in a LATER context" sLocation)
-        else if envContains env.NowEnv sName then
-                CanLookupResult.No(makeError $"Cannot access variable {s.LogicalName} in a INITIAL context, as it is only accessible in a NOW context" sLocation)
-        else if envContains env.InitialEnv sName then
-            if canLookupUnstableInCurrentEnv || typeIsStable then CanLookupResult.Yes
+        else if env.NowEnv.TryGetValue (sName, &lookupRef) then
+            let (_, isVisible) = lookupRef
+            if isVisible then CanLookupResult.Yes
             else CanLookupResult.No(makeError $"Cannot access unstable variable {s.LogicalName} in current context" sLocation)
         else 
             CanLookupResult.Yes
@@ -238,40 +245,7 @@ let rec checkExpr (env: Environment) (e:FSharpExpr) : FSRPError list  =
                         else 
                             (env, [makeError $"{advFullName} cannot appear outside a LATER context" exprLocation])
                 else if fullName = boxFullName then
-                    ({ env with 
-                        InBox = true;
-                        Now = true;
-                        Later = false;
-                    }, [])  
-                //else if fullName = unboxFullName then
-                    //if isNowEnv env then
-                    //    printfn "%s" "ENTERING UNBOX"
-                    //    ({ env with 
-                    //        Now = false;
-                    //        Later = false;
-                    //    }, true, [])  
-                    //else 
-                    //    (env, true, [$"%s{formatErrorPrefix(e.Range)} {unboxFullName} cannot appear outside a NOW context"])
-                else if fullName = progressFullName then 
-                    if isLaterEnv env then
-                        let argsAreUnstable = isUnstableTypes (List.map (fun (e: FSharpExpr) -> e.Type) argExprs)
-                        let unstableArgsErrors = if argsAreUnstable then [makeError $"Arguments to {progressFullName} must be known to be stable" exprLocation] else []
-                        ({ env with 
-                            Later = false;
-                        }, unstableArgsErrors)   
-                    else 
-                        (env, [makeError $"{progressFullName} cannot appear outside a LATER context" exprLocation])
-                else if fullName = promoteFullName then
-                    if isNowEnv env then
-                        let argsAreUnstable = isUnstableTypes (List.map (fun (e: FSharpExpr) -> e.Type) argExprs)
-                        let unstableArgsErrors = if argsAreUnstable then [makeError $"Arguments to {promoteFullName} must be known to be stable" exprLocation] else []
-                        ({ env with 
-                            Now = false
-                            Later = false;
-                        }, unstableArgsErrors)
-                            
-                    else
-                        (env, [makeError $"{promoteFullName} cannot appear outside a NOW context" exprLocation])
+                    ((hideUnstableVariables { env with Now = true; Later = false; }), [])
                 else 
                     (env, [])
 
@@ -303,27 +277,23 @@ let rec checkExpr (env: Environment) (e:FSharpExpr) : FSRPError list  =
         List.append (checkExpr env bindingExpr) (checkExpr (addSymbolToCurrentEnv env bindingVar) bodyExpr)
     | BasicPatterns.LetRec(recursiveBindings, bodyExpr) ->
         let recursiveBindingsMemberOrFuncOrVals = (List.map fst recursiveBindings)
-        let (signalFunctionCount, errors) = 
-            if env.InFSRPFunction then
-                (List.fold (fun (c, ers) ((b, e): FSharpMemberOrFunctionOrValue * FSharpExpr) ->    
-                    match isSignalFunction b with
-                    | Yes -> (c + 1, ers)
-                    | YesLater | No -> (c, ers)
-                    | Error(err) -> (c, List.append [err] ers)
-                ) (0, []) recursiveBindings)
-            else (0, [])
+        //let (signalFunctionCount, errors) = 
+        //    if env.InFSRPFunction then
+        //        (List.fold (fun (c, ers) ((b, e): FSharpMemberOrFunctionOrValue * FSharpExpr) ->    
+        //            match isSignalFunction b with
+        //            | Yes -> (c + 1, ers)
+        //            | YesLater | No -> (c, ers)
+        //            | Error(err) -> (c, List.append [err] ers)
+        //        ) (0, []) recursiveBindings)
+        //    else (0, [])
         let bindingErrors = 
-            if signalFunctionCount > 0 then
-                if signalFunctionCount = recursiveBindings.Length then
-                    let signalFunEnv = { env with Now = true; }
-                    let signalFunEnvWithFunNames = List.fold addToLaterEnv signalFunEnv recursiveBindingsMemberOrFuncOrVals
-                    (List.collect (fun (_, expr) -> checkExpr signalFunEnvWithFunNames expr) recursiveBindings)
-                else 
-                    [makeError $"Either all or no functions are signal functions in mutually recursive block" e.Range]
+            if env.InFSRPFunction then 
+                let signalFunEnvWithFunNames = List.fold addToLaterEnv env recursiveBindingsMemberOrFuncOrVals
+                (List.collect (fun (_, expr) -> checkExpr signalFunEnvWithFunNames expr) recursiveBindings)
             else
                 (List.collect (snd >> checkExpr env) recursiveBindings)
         let bodyErrors = (checkExpr env bodyExpr)
-        List.append errors (List.append bindingErrors bodyErrors)
+        List.append bindingErrors bodyErrors
         
     | BasicPatterns.NewArray(arrayType, argExprs) ->
         checkExprs env argExprs
@@ -411,18 +381,16 @@ let argsToEnv (args: FSharpMemberOrFunctionOrValue list) =
 let defaultEnv : Environment = 
     {
         InFSRPFunction = false;
-        InBox = false;
-        InitialEnv = emptyMap ()
         Now = false;
-        NowEnv = emptyMap ()
+        NowEnv = emptyMap ();
         Later = false;
-        LaterEnv = emptyMap ()
+        LaterEnv = emptyMap ();
     }
 
 let checkMemberOrFunctionOrValue (memberOrFuncOrValue: FSharpMemberOrFunctionOrValue) (args: FSharpMemberOrFunctionOrValue list list) (body: FSharpExpr) (mutualRecursionNamesMap : Map<string, string list>) (mutualRecursionMFVMap: Map<string, FSharpMemberOrFunctionOrValue>) = 
     
     let isFSRPBinding = isFSRPBinding memberOrFuncOrValue
-    let isSignalFunction = if isFSRPBinding then (isSignalFunction memberOrFuncOrValue) else No
+    //let isSignalFunction = if isFSRPBinding then (isSignalFunction memberOrFuncOrValue) else No
     let recMemberOrFuncOrVals = 
         match mutualRecursionNamesMap.TryFind memberOrFuncOrValue.FullName with
         | Some(recNames) -> 
@@ -437,20 +405,12 @@ let checkMemberOrFunctionOrValue (memberOrFuncOrValue: FSharpMemberOrFunctionOrV
        
     let (env, signalFuncErrors) = 
         if isFSRPBinding then 
-            match isSignalFunction with 
-            | Yes | No -> 
-                ({ defaultEnv with  
-                    InFSRPFunction = true
-                    Now = true;
-                    NowEnv = argsEnv;
-                    LaterEnv = List.fold (fun env memberOrFunvOrVal -> addToEnv env memberOrFunvOrVal) (emptyMap ()) recMemberOrFuncOrVals
-                }, [])
-            | YesLater ->
-                ({ defaultEnv with  
-                    InFSRPFunction = true
-                    InitialEnv = addToEnv argsEnv memberOrFuncOrValue
-                }, [])
-            | Error(error) -> (defaultEnv, [error])
+            ({ defaultEnv with  
+                InFSRPFunction = true
+                Now = true;
+                NowEnv = argsEnv;
+                LaterEnv = List.fold (fun env memberOrFunvOrVal -> addToEnv env memberOrFunvOrVal) (emptyMap ()) recMemberOrFuncOrVals
+            }, [])
         else 
             (defaultEnv, [])
     let exprError = 

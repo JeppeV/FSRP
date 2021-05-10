@@ -11,10 +11,11 @@
     <Compile Include="Utility.fs" />
     <Compile Include="MutualRecursionChecker.fs" />
     <Compile Include="SimplyRaTTChecker.fs" />
-    <Compile Include="FRPLibrary.fs">
+    <Compile Include="FSRPLibrary.fs">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Compile>
-    <Compile Include="TestInput.fs">
+    <Compile Include="FSRPTests.fs" />
+    <Compile Include="ShooterGame.fs">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Compile>
     <Compile Include="FRPLibraryTest.fs" />

@@ -5,11 +5,13 @@ open FSRP.Library
 open FSharp.Reflection
 open System
 
+open ShooterGame
+
 let genRandomNumbers count =
     let rnd = System.Random()
     List.init count (fun _ -> rnd.Next (10000))
 
-let test_signal = test (box (lazy(delay(lazy(1)))))
+//let test_signal = test (box (lazy(delay(lazy(1)))))
 
 [<EntryPoint>]
 let main argv =
@@ -21,6 +23,6 @@ let main argv =
     let output (current: int) = printfn "%A" current; true
         //if current % 10 = 0 then printfn "%A" current
     
-
-    (unfold_signal test_signal output)
+    run()
+    //(unfold_signal test_signal output)
     0

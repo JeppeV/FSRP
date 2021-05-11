@@ -27,13 +27,21 @@
         let public delay(expr: Lazy<'T>) : Later<'T> =  
             let idx = store.laterHeap.Count
             store.laterHeap.Add(expr)
-            Later(idx)
+            let res : Later<'T> = Later(idx)
+            printfn "ADD IDX %A, TYPE: %A" idx (res.GetType ())
+            res
 
-        let private internal_adv(Later(idx): Later<'T>) : 'T = 
-            let lazy_expr : Lazy<'T> = downcast store.nowHeap.[idx]
-            lazy_expr.Force()
+        let private internal_adv(later: Later<'T>) : 'T = 
+            let (Later(idx)) = later
+            let c = store.nowHeap.[idx]
+            printfn "GET IDX %A, TYPE: %A" idx (later.GetType ())
+            let lazy_expr : Lazy<'T> = downcast c
+            let result = lazy_expr.Force()
+            
+            result
 
         let private tick () =
+            printfn "TICK"
             do store.tick()
        
         let public adv(later_expr: Later<'T>) : 'T = 
@@ -85,7 +93,7 @@
 
         [<FSRP>]
         let rec map (f: Box<'X -> 'Y>) ((x :: xs): Signal<'X>) : Signal<'Y> = 
-            unbox(f) x :: delay (lazy (map f (adv xs)))
+            unbox f x :: delay (lazy (map f (adv xs)))
 
         [<FSRP>]
         let rec iter (f: Box<'X -> Later<'X>>) (acc: 'X) : Signal<'X> =

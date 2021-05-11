@@ -50,32 +50,35 @@ let updatePlayerSignal initPlayer (inputSignal : Signal<Input>) =
     let signal = scan (box (lazy updatePlayer)) (box (lazy initPlayer)) inputSignal
     map (box (lazy unbox)) signal
 
-let inGameSignal (initPlayer1: Player) (initPlayer2: Player) (inputSignal : Signal<Input * Input>) = 
+let preGameStateSignal = constant (box (lazy (PreGame)))
+
+let inGameStateSignal = constant (box (lazy (InGame)))
+
+let preGameSignal (initPlayer1: Player) (initPlayer2: Player) (gameStateAndInputSignal : Signal<GameState * (Input * Input)>) = 
+    zip (preGameStateSignal, constant (box (lazy (initPlayer1, initPlayer2))))
+
+let inGameSignal (initPlayer1: Player) (initPlayer2: Player) (gameStateAndInputSignal : Signal<GameState * (Input * Input)>) = 
+    let inputSignal = map (box (lazy snd)) gameStateAndInputSignal
     let inputSignal1 = map (box (lazy fst)) inputSignal
     let inputSignal2 = map (box (lazy snd)) inputSignal
-    (zip ((updatePlayerSignal initPlayer1 inputSignal1), (updatePlayerSignal initPlayer2 inputSignal2)))
+    (zip (inGameStateSignal, (zip ((updatePlayerSignal initPlayer1 inputSignal1), (updatePlayerSignal initPlayer2 inputSignal2)))))
 
-let startGameTrigger initPlayer1 initPlayer2 (input1, input2) = 
-    match (input1, input2) with 
-    | (Start, _) | (_, Start) -> printfn "Changing to inGameSignal"; Some(inGameSignal initPlayer1 initPlayer2)
+let gameStateTrigger initPlayer1 initPlayer2 (gameState, (input1, input2)) = 
+    match (gameState, input1, input2) with 
+    | (PreGame, Start, _) | (PreGame, _, Start) -> 
+        printfn "\nCHANGE GAMESTATE TO inGameSignal\n"; 
+        Some(inGameSignal initPlayer1 initPlayer2)
+    | (InGame, Exit, _) | (InGame, _, Exit) -> printfn "\nCHANGE GAMESTATE TO preGameSignal\n"; Some(preGameSignal initPlayer1 initPlayer2)
     | _ -> None
 
-let startGameEvent (initPlayer1: Player) (initPlayer2: Player) (inputSignal : Signal<Input * Input>) =
-    (map (box (lazy (startGameTrigger initPlayer1 initPlayer2))) inputSignal)
-
-let preGameSignal (initPlayer1: Player) (initPlayer2: Player) (inputSignal : Signal<Input * Input>) = 
-    let constPlayerSignalFunction (initPlayer1: Player) (initPlayer2: Player) (_ : Signal<Input * Input>) = constant (box (lazy (initPlayer1, initPlayer2)))
-    (switchFun (constPlayerSignalFunction initPlayer1 initPlayer2) (startGameEvent initPlayer1 initPlayer2 inputSignal) inputSignal)
-    
-let endGameTrigger (initPlayer1: Player) (initPlayer2: Player) (input1, input2) = 
-    match (input1, input2) with 
-    | (Exit, _) | (_, Exit) -> printfn "Changing to preGameSignal"; Some(preGameSignal initPlayer1 initPlayer2)
-    | _ -> None
+let gameStateEvent (initPlayer1: Player) (initPlayer2: Player) (gameStateAndInputSignal : Signal<GameState * (Input * Input)>) =
+    map (box (lazy (gameStateTrigger initPlayer1 initPlayer2))) gameStateAndInputSignal
 
 let shooterGame (initPlayer1: Player) (initPlayer2: Player) (inputSignal : Signal<Input * Input>) = 
-    let endGameEvent = (map (box (lazy (endGameTrigger initPlayer1 initPlayer2))) inputSignal)
 
-    switchFun (preGameSignal initPlayer1 initPlayer2) endGameEvent inputSignal
+    let gameStateAndInputSignal : Signal<GameState * (Input * Input)> = zip (preGameStateSignal, inputSignal)
+    
+    switchFun (preGameSignal initPlayer1 initPlayer2) (gameStateEvent initPlayer1 initPlayer2 gameStateAndInputSignal) gameStateAndInputSignal
 
 let run () = 
     let player1 = {
@@ -94,15 +97,16 @@ let run () =
         Alive = true;    
     }
 
-    let readPlayerInputFun () : Input * Input = (getRandomInput (), getRandomInput ()) // calculate some input
+    let readPlayerInputFun () : GameState * (Input * Input) = (InGame, (getRandomInput (), getRandomInput ())) // calculate some input
+    let readPlayerInputFun () : (Input * Input) = (getRandomInput (), getRandomInput ()) // calculate some input
 
-    let output ((player1, player2) : Player * Player) =
+    let output (gameState, (player1, player2) : Player * Player) =
         drawToScreen player1 player2
         if not player1.Alive || not player2.Alive then
             false
         else true
         
-    process_signal (shooterGame player1 player2) readPlayerInputFun output 1000
+    process_signal (shooterGame player1 player2) readPlayerInputFun output 300
 
 
     

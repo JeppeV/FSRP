@@ -1,7 +1,7 @@
 ﻿module FSRPTests
     
     open FSRP.Core
-    open FSRP.Library
+    open FSRP.Signal
     
     module rec Inner =
         
@@ -22,7 +22,35 @@
             let mut2 x y = test2 x y
 
 
+
+    
+    
+    
+
+    [<FSRP>]
+    let filter (p: Box<'A -> bool>) =
+        let rec fix ((x::xs): Signal<'A>) : Signal<Option<'A>> =
+            (if unbox p x then Some(x) else None) :: delay (lazy (adv fix (adv xs)))
+        fix
+
+    let isNumberEven x = x % 2 = 0
+
+    [<FSRP>]
+    let filterOutOddNumbers () : Signal<int> -> Signal<Option<int>> =
+        filter (box (lazy isNumberEven))
+
+
     let map_add_1 = (map (box (lazy (fun (i: int) -> i + 1))))
+    
+
+    [<FSRP>]
+    let alt_map (f: 'A -> 'B) =
+        let rec run (s : Signal<'A>) =
+            (f (head s)) :: delay (lazy (run (adv (tail s))))
+        run
+
+
+   
     
     //test mutual recursion at the top level
     [<FSRP>]
@@ -44,7 +72,7 @@
     
     // FSRP function that is not interacting with signals
     [<FSRP>]
-    let app (f : Later<'a -> 'b>) (x : Later<'a>) : Later<'b> =  delay(lazy (adv f (adv x)))
+    let app (f) (x : Later<'a>) : Later<'b> =  delay(lazy (adv f (adv x)))
     
     [<FSRP>] // different implementation of map, also using the long name for the attribute
     let rec map_patrick (f : Box<'a -> 'b>) (s : Signal<'a>) : Signal<'a> =
@@ -158,7 +186,7 @@
 
     [<FSRP>]
     let wrapper_test () =
-        Wrapper(nats) // is this a signal function?
+        Wrapper(nats ()) // is this a signal function?
 
     [<FSRP>]
     let rec cheatMapForLeakyNats (hd::tl) =

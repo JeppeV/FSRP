@@ -7,13 +7,14 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="FSRPCore.fs" />
+    <Compile Include="FSRPLibrary.fs">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Compile>
     <Compile Include="FSRPError.fs" />
     <Compile Include="Utility.fs" />
     <Compile Include="MutualRecursionChecker.fs" />
     <Compile Include="SimplyRaTTChecker.fs" />
-    <Compile Include="FSRPLibrary.fs">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Compile>
     <Compile Include="FSRPTests.fs" />
     <Compile Include="ShooterGame.fs">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>

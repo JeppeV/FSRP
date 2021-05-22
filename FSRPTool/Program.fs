@@ -52,8 +52,6 @@ let main argv =
                 ) sourceFiles
             ) fcsProjectOptions
 
-        printfn "ProjectOptions: %A" projectOptions
-
         let parseAndTypeCheckResultsAndFilenames =
             (List.map (fun (projectOptions: FSharpProjectOptions, filename: string, source: ISourceText) ->
                 (checker.ParseAndCheckFileInProject(filename, 1, source, projectOptions) |> Async.RunSynchronously, filename)
@@ -89,11 +87,6 @@ let main argv =
                     (List.append newWarnings warnings, List.append newErrors errors)
                 ) ([], []) fsharpTypecheckResultsAllSucceeded)
 
-            // 20/4
-            //do if fsharpTypeCheckWarnings.Length > 0 then
-            //    printfn "Typecheck warnings:"
-            //    printList fsharpTypeCheckWarnings
-
             if fsharpTypeCheckErrors.Length > 0 then
                 printfn "Typecheck errors:"
                 printList fsharpTypeCheckErrors
@@ -118,8 +111,6 @@ let main argv =
                     printList mutualRecursionErrors
                     -1
                 else
-
-                    printfn "PurityAndmutualRecursionNamesMapResults: %A" mutualRecursionResultsResults
 
                     printfn "%s" "Running Simply RaTT checks..."
                     let simplyRattCheckResults = 

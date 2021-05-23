@@ -26,9 +26,9 @@
             (if unbox p x then Some(x) else None) :: delay (lazy (filter p (adv xs)))
 
         [<FSRP>]
-        let rec scan (f: Box<Box<'Y> -> 'X -> Box<'Y>>) (acc: Box<'Y>) ((x :: xs): Signal<'X>) : Signal<Box<'Y>> =
+        let rec scan (f: Box<Box<'Y> -> 'X -> Box<'Y>>) (acc: Box<'Y>) ((x :: xs): Signal<'X>) : Signal<'Y> =
             let acc' = ((unbox f) acc x)
-            acc' :: delay (lazy (scan f acc' (adv xs)))
+            unbox acc' :: delay (lazy (scan f acc' (adv xs)))
 
         [<FSRP>]
         let rec zipWith (f: Box<'X -> 'Y -> 'Z>) ((x::xs): Signal<'X>) ((y::ys): Signal<'Y>) : Signal<'Z> =

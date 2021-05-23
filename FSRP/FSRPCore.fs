@@ -4,8 +4,6 @@
 
     module Core =
 
-        let reservedHeapIdx = 0
-
         module private Store =
 
             let mutable nowHeap = new ResizeArray<obj>()
@@ -35,7 +33,6 @@
             Store.laterHeap.Add(expr)
             Later(idx)
 
-        
         let public adv(laterExpr: Later<'T>) : 'T = 
            let (Later(idx)) = laterExpr
            let lazyExpr : Lazy<'T> = downcast Store.nowHeap.[idx]
@@ -44,6 +41,9 @@
         let public box(expr: Lazy<'T>) : Box<'T> = Box(expr)
         
         let public unbox(box_expr: Box<'T>) = match box_expr with | Box(box_expr) -> box_expr.Force()
+
+
+        // FOR DISCUSSION, DON'T DELETE
 
         //type private Signal<'A> (hd: 'A, tlExpr: Lazy<Signal<'A>>) =
         //    let hd = hd
@@ -80,6 +80,8 @@
 
         type private Undefined<'IN> () =
             [<DefaultValue>] val mutable signal : Signal<'IN>
+
+        let public resetStore () = Store.cleanup ()
 
         let public buildEvaluator (sf: Signal<'IN> -> Signal<'OUT>) : Eval<'IN, 'OUT> = 
 

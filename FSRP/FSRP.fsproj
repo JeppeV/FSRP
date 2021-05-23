@@ -1,7 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
     <TargetFramework>net5.0</TargetFramework>
     <VersionPrefix>1.0.6</VersionPrefix>
   </PropertyGroup>
@@ -11,15 +10,6 @@
     <Compile Include="FSRPLibrary.fs">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Compile>
-    <Compile Include="FSRPError.fs" />
-    <Compile Include="Utility.fs" />
-    <Compile Include="MutualRecursionChecker.fs" />
-    <Compile Include="SimplyRaTTChecker.fs" />
-    <Compile Include="FSRPTests.fs" />
-    <Compile Include="ShooterGame.fs">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Compile>
-    <Compile Include="FRPLibraryTest.fs" />
   </ItemGroup>
 
   <ItemGroup>

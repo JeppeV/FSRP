@@ -2,7 +2,7 @@
   "profiles": {
     "Driver": {
       "commandName": "Project",
-      "commandLineArgs": "..\\..\\..\\..\\FSRP\\FSRP.fsproj"
+      "commandLineArgs": "..\\..\\..\\..\\FSRP\\FSRP.fsproj ..\\..\\..\\..\\FSRPTest\\FSRPTest.fsproj"
     }
   }
 }

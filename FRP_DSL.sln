@@ -7,6 +7,8 @@ Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "FSRPTool", "FSRPTool\FSRPTo
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "FSRP", "FSRP\FSRP.fsproj", "{AF998869-6B63-452B-BF49-626D58790C73}"
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "FSRPTest", "FSRPTest\FSRPTest.fsproj", "{AC4953A3-6C94-4EE0-AE4B-2090E17D38B0}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,10 @@ Global
 		{AF998869-6B63-452B-BF49-626D58790C73}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{AF998869-6B63-452B-BF49-626D58790C73}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{AF998869-6B63-452B-BF49-626D58790C73}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AC4953A3-6C94-4EE0-AE4B-2090E17D38B0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AC4953A3-6C94-4EE0-AE4B-2090E17D38B0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AC4953A3-6C94-4EE0-AE4B-2090E17D38B0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AC4953A3-6C94-4EE0-AE4B-2090E17D38B0}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

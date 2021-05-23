@@ -30,7 +30,7 @@
     [<FSRP>]
     let filter (p: Box<'A -> bool>) =
         let rec fix ((x::xs): Signal<'A>) : Signal<Option<'A>> =
-            (if unbox p x then Some(x) else None) :: delay (lazy (adv fix (adv xs)))
+            (if unbox p x then Some(x) else None) :: delay (lazy (fix (adv xs)))
         fix
 
     let isNumberEven x = x % 2 = 0
@@ -48,9 +48,6 @@
         let rec run (s : Signal<'A>) =
             (f (head s)) :: delay (lazy (run (adv (tail s))))
         run
-
-
-   
     
     //test mutual recursion at the top level
     [<FSRP>]
@@ -203,7 +200,7 @@
 
     [<FSRP>]
     let rec unstableLookup () =
-        let unstable = fun x -> 1
+        let unstable = box (lazy fun x -> x)
         box(lazy(unstable))
 
 

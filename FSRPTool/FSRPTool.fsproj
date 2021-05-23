@@ -10,6 +10,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="Utility.fs" />
+    <Compile Include="FSRPError.fs" />
+    <Compile Include="FSRPRecursionChecker.fs" />
+    <Compile Include="FSRPTypeChecker.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 
@@ -17,10 +21,6 @@
     <PackageReference Include="FSharp.Compiler.Service" Version="39.0.0" />
     <PackageReference Include="Ionide.ProjInfo" Version="0.52.0" />
     <PackageReference Include="Ionide.ProjInfo.FCS" Version="0.52.0" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\FSRP\FSRP.fsproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -20,13 +20,15 @@
                 laterHeap <- new ResizeArray<obj>()
 
         
+        type public FSRPAttribute() = inherit System.Attribute()
 
         type public Box<'T> = private Box of Lazy<'T>
 
-        type public FSRPAttribute() = inherit System.Attribute()
-
         type public Later<'T> = private Later of int
 
+        type public Signal<'T> = | (::) of 'T * Later<Signal<'T>>
+
+        type public Event<'T> = Signal<Option<'T>>
         
         let public delay (expr: Lazy<'T>) : Later<'T> =  
             let idx = Store.laterHeap.Count
@@ -40,39 +42,7 @@
 
         let public box(expr: Lazy<'T>) : Box<'T> = Box(expr)
         
-        let public unbox(box_expr: Box<'T>) = match box_expr with | Box(box_expr) -> box_expr.Force()
-
-
-        // FOR DISCUSSION, DON'T DELETE
-
-        //type private Signal<'A> (hd: 'A, tlExpr: Lazy<Signal<'A>>) =
-        //    let hd = hd
-        //    let tlExpr = tlExpr
-        //    let mutable tlDelayed = false
-        //    let mutable tlLater : Later<Signal<'A>> = Later(-1)
-
-        //    member this.Head with get() = hd
-        //    member this.Tail with get() = 
-        //        if not tlDelayed then
-        //            tlLater <- delay tlExpr
-        //            tlDelayed <- true
-        //        tlLater
-
-            
-
-        //let Signal (hd: 'A, tlExpr: Lazy<Signal<'A>>) = new Signal<'A>(hd, tlExpr)
-
-        //let (|Signal|) (s: Signal<'A>) = s.Head, s.Tail
-
-        //let rec map (f: Box<'A -> 'B>) (Signal(hd, tl): Signal<'A>) =
-        //    Signal (unbox f hd, lazy (map f (adv tl))) 
-        
-                
-        [<Struct>]
-        type Signal<'T> = 
-            | (::) of S: 'T * Later<Signal<'T>>
-
-        type Event<'T> = Signal<Option<'T>>
+        let public unbox(Box(boxExpr): Box<'T>) = boxExpr.Force()
 
         type Eval<'IN, 'OUT> = Eval of ('IN -> ('OUT * Eval<'IN, 'OUT>))
 
@@ -100,52 +70,38 @@
                 let inputSignal = i :: later
                 let (o :: os) = sf inputSignal
                 (o, Eval(restEval later os))
-            
+
             Eval(firstEval)
             
         let public buildUnfolder (s: Signal<'OUT>) : Unfold<'OUT> =
+
             let rec unfold ((o :: os): Signal<'OUT>) () =
                 do Store.progress ()
                 let tl = adv os
                 (o, Unfold(unfold tl))
             Unfold((unfold s))
+
+
+// FOR DISCUSSION, DON'T DELETE
+
+        //type private Signal<'A> (hd: 'A, tlExpr: Lazy<Signal<'A>>) =
+        //    let hd = hd
+        //    let tlExpr = tlExpr
+        //    let mutable tlDelayed = false
+        //    let mutable tlLater : Later<Signal<'A>> = Later(-1)
+
+        //    member this.Head with get() = hd
+        //    member this.Tail with get() = 
+        //        if not tlDelayed then
+        //            tlLater <- delay tlExpr
+        //            tlDelayed <- true
+        //        tlLater
+
             
-            //let rec sf1 ((o :: os): Signal<'OUT>) = 
-            //    let sf2 ((_ :: us) : Signal<unit>) =
-            //        o :: delay (lazy (sf1 (adv os)) (adv us))
-            //    sf2
-                
-            //let sf = sf1 s
 
-            //buildEvaluator sf
+        //let Signal (hd: 'A, tlExpr: Lazy<Signal<'A>>) = new Signal<'A>(hd, tlExpr)
 
-        //let rec private consume_signal (signal: Signal<'B>) (output: 'B -> bool) (intervalInMillis: int) =
-        //    match signal with
-        //    | hd::tl -> 
-        //        if output hd then
-        //            do System.Threading.Thread.Sleep(intervalInMillis)
-        //            do tick()
-        //            do consume_signal (internal_adv tl) output intervalInMillis
-        //        else 
-        //            do store.cleanup()
-        //            ()
-                
-        //[<FSRP>]
-        //let private make_input_signal input_fun = 
-        //    let rec input_signal () = input_fun () :: delay(lazy(input_signal ()))
-        //    input_signal ()
+        //let (|Signal|) (s: Signal<'A>) = s.Head, s.Tail
 
-        //let process_signal (sf: Signal<'A> -> Signal<'B>) (input: unit -> 'A) (output: 'B -> bool) (intervalInMillis: int) =
-        //    let input_signal = make_input_signal input
-        //    let output_signal = sf input_signal
-        //    consume_signal output_signal output intervalInMillis
-
-        //let unfold_signal (signal: Signal<'A>) (output: 'A -> bool) (intervalInMillis: int) =
-        //    consume_signal signal output intervalInMillis
-
-        //let SF (f: 'initial -> 'now -> Later<'now -> 'ret> -> 'ret) : 'initial -> Box<'now -> 'ret> =
-        //    let rec inner (i: 'initial) (n: 'now) : 'ret = 
-        //        (f i n (Later(lazy(inner i))))
-            
-        //    fun (i: 'initial) -> Box(lazy(inner i))
-
+        //let rec map (f: Box<'A -> 'B>) (Signal(hd, tl): Signal<'A>) =
+        //    Signal (unbox f hd, lazy (map f (adv tl))) 

@@ -203,5 +203,15 @@
         let unstable = box (lazy fun x -> x)
         box(lazy(unstable))
 
+    [<FSRP>]
+    let stutter () = 
+        unfold 
+            (box (lazy fun (count, current) ->
+                if count < 0 then
+                    (current, delay (lazy (count + 1, current)))
+                else
+                    (current + 1, delay (lazy (0, current + 1))
+            ))) (0, 0)
+
 
 

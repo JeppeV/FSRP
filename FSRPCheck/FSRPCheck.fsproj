@@ -13,6 +13,7 @@
   <ItemGroup>
     <Compile Include="Utility.fs" />
     <Compile Include="FSRPError.fs" />
+    <Compile Include="Examples.fs" />
     <Compile Include="FSRPRecursionChecker.fs" />
     <Compile Include="FSRPTypeChecker.fs" />
     <Compile Include="Program.fs" />

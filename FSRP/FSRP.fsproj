@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <Compile Include="FSRPCore.fs" />
+    <Compile Include="FSRPCoreUnmanaged.fs" />
     <Compile Include="FSRPSignal.fs">
     </Compile>
   </ItemGroup>

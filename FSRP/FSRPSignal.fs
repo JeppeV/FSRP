@@ -27,20 +27,13 @@
             unbox x :: delay (lazy (constant x))
 
         [<FSRP>]
-        let rec alternate ((x1::x1s): Signal<'X>) ((_::x2s) : Signal<'X>) =
-            x1 :: delay (lazy (alternate' (adv x1s) (adv x2s)))
-        
-        and [<FSRP>] private alternate' ((_::x1s): Signal<'X>) ((x2::x2s): Signal<'X>) =
-            x2 :: delay (lazy (alternate (adv x1s) (adv x2s)))
-
-        [<FSRP>]
         let rec filter (p: Box<'X -> bool>) ((x::xs): Signal<'X>) : Signal<Option<'X>> =
             (if unbox p x then Some(x) else None) :: delay (lazy (filter p (adv xs)))
 
         [<FSRP>]
-        let rec scan (f: Box<Box<'State> -> 'X -> Box<'State>>) (state: Box<'State>) ((x :: xs): Signal<'X>) : Signal<'State> =
+        let rec scan (f: Box<'State -> 'X -> Box<'State>>) (state: 'State) ((x :: xs): Signal<'X>) : Signal<'State> =
             let state' = ((unbox f) state x)
-            unbox state' :: delay (lazy (scan f state' (adv xs)))
+            unbox state' :: delay (lazy (scan f (unbox state') (adv xs)))
 
         [<FSRP>]
         let rec zipWith (f: Box<'X -> 'Y -> 'Z>) ((x::xs): Signal<'X>) ((y::ys): Signal<'Y>) : Signal<'Z> =

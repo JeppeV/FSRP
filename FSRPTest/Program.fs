@@ -1,6 +1,6 @@
 ﻿// Learn more about F# at http://fsharp.org
 
-open System
+open FSRPTests
 open FSRP.Core
 open FSRP.Signal
 open ShooterGame
@@ -13,10 +13,12 @@ let main argv =
         printfn "%A" out
         unfold eval'
 
-    let evaluator = buildUnfolder (zeros ())
-    //unfold evaluator
+    let unfolder = buildUnfolder (wtf ())
+    unfold unfolder
 
-    start ()
+    //start ()
+
+
    
     //(unfold_signal (leakyNats ()) output 0)
     0

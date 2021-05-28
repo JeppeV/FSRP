@@ -21,23 +21,79 @@
             
             let mut2 x y = test2 x y
 
+   
+
+        
+    [<FSRP>]
+    let test (f: 'a -> 'b) =
+        constant (box (lazy (f 1)))
+    
+    
+    let getRandomInteger () = (new System.Random()).Next 10
+
+    type Yes = private Yes of unit
+
+    type Stable<'X when 'X : (static member IsStable : Yes)> = 'X
+
+    type System.Int32 with
+        static member IsStable = Yes ()        
+
+    [<FSRP>]
+    let rec doubleDelay () =
+        1 :: delay (lazy ( 1 :: delay (lazy doubleDelay ())))
 
 
+    [<FSRP>]
+    let foo () =
+        let bar (x: int) = x
+
+        // Gets transformed into:
+        let bar = fun (x: int) -> x
+
+        ()
+
+    [<FSRP>]
+    let rec wtf () =
+        1 :: delay (lazy (adv (delay (lazy (wtf ())))))
+
+    [<FSRP>]
+    let rec testRecLetInDelay i =
+        let rec inner1 (x : int) = inner1 x
+        i :: delay (lazy (testRecLetInDelay (inner1 i)))
+
+
+    [<FSRP>]
+    let rec no_tick_in_box () = 
+        let t = (delay (lazy 2), delay (lazy 3))    
+        1 :: delay (lazy (adv (fst t) :: delay (lazy (adv (snd t) :: (delay (lazy (no_tick_in_box ())))))))
+
+    [<FSRP>]
+    let rec stutter2 (i : int) =  
+        let x = delay (lazy 1)
+        i :: delay (lazy unbox (box (lazy (i :: (delay (lazy (stutter2 (i + 1))))))))
     
-    
-    
+    let isNumberEven x = x % 2 = 0
 
     [<FSRP>]
     let filter (p: Box<'A -> bool>) =
-        let rec fix ((x::xs): Signal<'A>) : Signal<Option<'A>> =
-            (if unbox p x then Some(x) else None) :: delay (lazy (fix (adv xs)))
-        fix
-
-    let isNumberEven x = x % 2 = 0
+        let rec fixed_point ((x::xs): Signal<'A>) : Signal<Option<'A>> =
+            (if unbox p x then Some(x) else None) :: delay (lazy (fixed_point (adv xs)))
+        fixed_point
 
     [<FSRP>]
     let filterOutOddNumbers () : Signal<int> -> Signal<Option<int>> =
         filter (box (lazy isNumberEven))
+
+    let start () =
+        let rec run (Eval(eval)) =
+            let (evenNumberOpt, eval') = eval (getRandomInteger ())
+            do match evenNumberOpt with
+               | Some (evenNumber) -> printfn "%A is an even number!" evenNumber
+               | None -> ()
+            run eval'
+    
+        let evaluator = buildEvaluator (filterOutOddNumbers ())
+        run evaluator
 
 
     let map_add_1 = (map (box (lazy (fun (i: int) -> i + 1))))
@@ -178,8 +234,8 @@
         x::delay(lazy(johnny x (adv tl)))
 
     [<FSRP>]
-    let rec test (i: Box<Later<int>>) : Signal<int> =
-        1 :: delay(lazy(test (box (lazy(delay (lazy(1)))))))
+    let rec test77 (i: Box<Later<int>>) : Signal<int> =
+        1 :: delay(lazy(test77 (box (lazy(delay (lazy(1)))))))
 
     [<FSRP>]
     let wrapper_test () =
@@ -199,10 +255,15 @@
         0 :: delay(lazy(map (box(lazy(fun i -> i + 1))) (leakyNats ())))
 
     [<FSRP>]
+    let rec unleakyNats () : Signal<int> =
+        let maps = box (lazy (map (box (lazy (fun i -> i + 1)))))
+        0 :: delay(lazy(unbox maps (leakyNats ())))
+
+    [<FSRP>]
     let rec unstableLookup () =
         let unstable = box (lazy fun x -> x)
         box(lazy(unstable))
-
+        
     [<FSRP>]
     let stutter () = 
         unfold 

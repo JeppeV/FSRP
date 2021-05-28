@@ -39,7 +39,8 @@ open FSRPError
 
         let isFSRPBinding (memberOrFunctionOrValue: FSharpMemberOrFunctionOrValue) : bool =
             (List.exists (fun (a : FSharpAttribute) -> 
-                a.AttributeType.AccessPath = fsrpCoreAccessPath && a.AttributeType.DisplayName = fsrpCoreAttributeName
+                a.AttributeType.AccessPath = fsrpCoreAccessPath && 
+                a.AttributeType.DisplayName = fsrpCoreAttributeName
             ) (List.ofSeq memberOrFunctionOrValue.Attributes))
 
         let rec isUnstableType(t: FSharpType) : bool =
@@ -63,6 +64,8 @@ open FSRPError
         and isUnstableTypes (ts : FSharpType list) : bool = 
             List.fold (fun acc t -> (isUnstableType t) || acc) false ts
 
+        let isNowEnv (env: Environment) = not env.Later
+
         let isLaterEnv (env: Environment) = env.Later
 
         let addToNowEnv (env: Environment) (s: FSharpMemberOrFunctionOrValue) =
@@ -80,41 +83,98 @@ open FSRPError
             env.Add(s.LogicalName, (s.FullType, true))
 
         let stabilizeEnv (envMap: EnvMap) : EnvMap =
-            Map.fold (fun acc name (fsharpType, visible) -> 
+            Map.fold (fun acc name (fsharpType, _) -> 
                 (acc.Add (name, (fsharpType, (not (isUnstableType fsharpType)))))      
             ) (Map([])) envMap
 
         let hideUnstableVariables (env: Environment) : Environment =
             { env with NowEnv = stabilizeEnv env.NowEnv; LaterEnv = stabilizeEnv env.LaterEnv }
         
-        let tryLookup (env: Environment) (s: FSharpMemberOrFunctionOrValue) (loc: range) : CanLookupResult =
-            let sName = s.LogicalName
-            let sLocation = loc
-            let typeIsStable = not (isUnstableType s.FullType)
-            let mutable lookupRef : FSharpType * bool = (s.FullType, true)
+        let tryLookup (env: Environment) (var: FSharpMemberOrFunctionOrValue) (varLoc: range) : CanLookupResult =
+            let varName = var.LogicalName
+            let typeIsStable = not (isUnstableType var.FullType)
+            let mutable lookupRef : FSharpType * bool = (var.FullType, true)
             if isLaterEnv env then
-                if env.LaterEnv.TryGetValue (sName, &lookupRef) then
+                if env.LaterEnv.TryGetValue (varName, &lookupRef) then
                     let (_, isVisible) = lookupRef
-                    if isVisible then Success
-                    else Error(makeError $"Cannot access unstable variable {s.LogicalName} in current context" sLocation)
-                else if env.NowEnv.TryGetValue (sName, &lookupRef) then
+                    if isVisible then 
+                        Success
+                    else 
+                        Error(makeError $"Cannot access unstable variable {var.LogicalName} in current context" varLoc)
+                else if env.NowEnv.TryGetValue (varName, &lookupRef) then
                     let (_, isVisible) = lookupRef
-                    if isVisible && typeIsStable then Success
-                    else Error(makeError $"Cannot access variable {s.LogicalName} in a LATER context, as it is only accessible in a NOW context" sLocation)
+                    if isVisible && typeIsStable then 
+                        Success
+                    else 
+                        Error(makeError $"Cannot access variable {var.LogicalName} in a LATER context, as it is only accessible in a NOW context" varLoc)
                 else Success
             else
-                if env.LaterEnv.TryGetValue (sName, &lookupRef) then
-                    Error(makeError $"Cannot access variable {s.LogicalName} in a NOW context, as it is only accessible in a LATER context" sLocation)
-                else if env.NowEnv.TryGetValue (sName, &lookupRef) then
+                if env.LaterEnv.TryGetValue (varName, &lookupRef) then
+                    Error(makeError $"Cannot access variable {var.LogicalName} in a NOW context, as it is only accessible in a LATER context" varLoc)
+                else if env.NowEnv.TryGetValue (varName, &lookupRef) then
                     let (_, isVisible) = lookupRef
-                    if isVisible then Success
-                    else Error(makeError $"Cannot access unstable variable {s.LogicalName} in current context" sLocation)
+                    if isVisible then 
+                        Success
+                    else 
+                        Error(makeError $"Cannot access unstable variable {var.LogicalName} in current context" varLoc)
                 else 
                     Success
 
-
-        let rec checkExpr (env: Environment) (e:FSharpExpr) : FSRPError list  =
+        let rec checkExpr (env: Environment) (e:FSharpExpr) : FSRPError list =
             match e with
+            | BasicPatterns.Let((bindingVar, bindingExpr), bodyExpr) ->
+                List.append (checkExpr env bindingExpr) (checkExpr (addSymbolToCurrentEnv env bindingVar) bodyExpr)   
+            
+            | BasicPatterns.Call(objExprOpt, funcVar, _, _, argExprs) ->
+                let funcFullName = funcVar.FullName
+                let funcVarLocation = e.Range
+                let lookupErrors = 
+                    match tryLookup env funcVar funcVarLocation with
+                    | Error(error) -> [error]
+                    | _ -> []
+
+                let objExprErrors = checkObjArg env objExprOpt
+                let (updatedEnv, envErrors) = 
+                        if funcFullName = delayFullName then
+                            if isNowEnv env then
+                                ({ env with 
+                                    Later = true;
+                                }, [])
+                            else 
+                                (env, [makeError $"{delayFullName} cannot appear outside a NOW context" funcVarLocation])
+                        else if funcFullName = advFullName then
+                                if isLaterEnv env then  
+                                    ({ env with 
+                                        Later = false;
+                                    }, [])   
+                                else 
+                                    (env, [makeError $"{advFullName} cannot appear outside a LATER context" funcVarLocation])
+                        else if funcFullName = boxFullName then
+                            let stableNowEnv = hideUnstableVariables { env with Later = false; }
+                            (stableNowEnv, [])
+                        else 
+                            (env, [])
+                let argErrors = checkExprs updatedEnv argExprs              
+                appendMany [objExprErrors; envErrors; lookupErrors; argErrors] 
+            
+            | BasicPatterns.LetRec(recursiveBindings, bodyExpr) ->
+                let letRecVars = (List.map fst recursiveBindings)
+                let letRecBodies = (List.map snd recursiveBindings)
+                let bindingErrors = 
+                    let stableEnv = hideUnstableVariables env
+                    let stableEnvWithRecLetVarsInLater = List.fold addToLaterEnv stableEnv letRecVars
+                    (List.collect (checkExpr stableEnvWithRecLetVarsInLater) letRecBodies)
+                let envWithRecLetVarsInNow = List.fold addToNowEnv env letRecVars
+                let bodyErrors = (checkExpr envWithRecLetVarsInNow bodyExpr)
+                List.append bindingErrors bodyErrors
+
+            | BasicPatterns.Lambda(lambdaVar, bodyExpr) ->
+                if isLaterEnv env && not lambdaVar.IsCompilerGenerated then
+                    (makeError $"Cannot declare function in a LATER context" e.Range) :: 
+                    (checkExpr (addSymbolToCurrentEnv env lambdaVar) bodyExpr)
+                else
+                    checkExpr (addSymbolToCurrentEnv env lambdaVar) bodyExpr
+
             | BasicPatterns.AddressOf(lvalueExpr) ->
                 checkExpr env lvalueExpr 
             | BasicPatterns.AddressSet(lvalueExpr, rvalueExpr) ->
@@ -123,36 +183,6 @@ open FSRPError
                 checkExpr env expr 
             | BasicPatterns.Application(funcExpr, typeArgs, argExprs) ->
                 appendMany [(checkExpr env funcExpr); (checkExprs env argExprs)]
-            | BasicPatterns.Call(objExprOpt, memberOrFunc, typeArgs1, typeArgs2, argExprs) ->
-
-                let fullName = memberOrFunc.FullName
-                let exprLocation = e.Range
-
-                let objExprErrors = checkObjArg env objExprOpt
-                let (env', envErrorList) = 
-                        if fullName = delayFullName then
-                            ({ env with 
-                                Later = true;
-                            }, [])
-                        else if fullName = advFullName then
-                                if isLaterEnv env then  
-                                    ({ env with 
-                                        Later = false;
-                                    }, [])   
-                                else 
-                                    (env, [makeError $"{advFullName} cannot appear outside a LATER context" exprLocation])
-                        else if fullName = boxFullName then
-                            ((hideUnstableVariables { env with Later = false; }), [])
-                        else 
-                            (env, [])
-
-                let lookupErrorList = 
-                    match tryLookup env memberOrFunc e.Range with
-                    | Error(error) -> [error]
-                    | _ -> []
-                                 
-                appendMany [objExprErrors; envErrorList; lookupErrorList; (checkExprs env' argExprs)]
-        
             | BasicPatterns.Coerce(targetType, inpExpr) ->
                 checkExpr env inpExpr
             | BasicPatterns.FastIntegerForLoop(startExpr, limitExpr, consumeExpr, isUp) ->
@@ -165,22 +195,8 @@ open FSRPError
                 appendMany [[makeWarning "Impure expressions are discouraged in FSRP bindings" e.Range]; checkObjArg env objExprOpt] 
             | BasicPatterns.IfThenElse (guardExpr, thenExpr, elseExpr) ->
                 List.append (checkExpr env guardExpr) (List.append (checkExpr env thenExpr) (checkExpr env elseExpr)) 
-            | BasicPatterns.Lambda(lambdaVar, bodyExpr) ->
-                if isLaterEnv env && not lambdaVar.IsCompilerGenerated then
-                    (makeError $"Cannot declare function in a LATER context" e.Range) :: (checkExpr (addSymbolToCurrentEnv env lambdaVar) bodyExpr)
-                else
-                    checkExpr (addSymbolToCurrentEnv env lambdaVar) bodyExpr
             | BasicPatterns.Let((bindingVar, bindingExpr), bodyExpr) ->
-                List.append (checkExpr env bindingExpr) (checkExpr (addSymbolToCurrentEnv env bindingVar) bodyExpr)
-            | BasicPatterns.LetRec(recursiveBindings, bodyExpr) ->
-                let recursiveBindingsMemberOrFuncOrVals = (List.map fst recursiveBindings)
-                let bindingErrors = 
-                    let env' = hideUnstableVariables env
-                    let signalFunEnvWithFunNames = List.fold addToLaterEnv env' recursiveBindingsMemberOrFuncOrVals
-                    (List.collect (fun (_, expr) -> checkExpr signalFunEnvWithFunNames expr) recursiveBindings)
-                let bodyErrors = (checkExpr env bodyExpr)
-                List.append bindingErrors bodyErrors
-        
+                List.append (checkExpr env bindingExpr) (checkExpr (addSymbolToCurrentEnv env bindingVar) bodyExpr)        
             | BasicPatterns.NewArray(arrayType, argExprs) ->
                 checkExprs env argExprs
             | BasicPatterns.NewDelegate(delegateType, delegateBodyExpr) ->
@@ -263,20 +279,13 @@ open FSRPError
             )
             (List.fold folder (Map([])) args)
 
-        let defaultEnv : Environment = 
-            {
-                NowEnv = Map([])
-                Later = false
-                LaterEnv = Map([])
-            }
-
         let checkMemberOrFunctionOrValue (memberOrFuncOrValue: FSharpMemberOrFunctionOrValue) (args: FSharpMemberOrFunctionOrValue list list) (body: FSharpExpr) (mutualRecursionNamesMap : Map<string, string list>) (mutualRecursionMFVMap: Map<string, FSharpMemberOrFunctionOrValue>) = 
     
             let isFSRPBinding = isFSRPBinding memberOrFuncOrValue
 
             if isFSRPBinding && args.Length = 0 then [(makeError "FSRP bindings must accept at least 1 argument (can be unit)" memberOrFuncOrValue.DeclarationLocation)]
             else if isFSRPBinding then
-                let recMemberOrFuncOrVals = 
+                let recursionVariables = 
                     match mutualRecursionNamesMap.TryFind memberOrFuncOrValue.FullName with
                     | Some(recNames) -> 
                         let folder acc rn =
@@ -286,16 +295,18 @@ open FSRPError
                         List.fold folder [] recNames
                     | _ -> [] // declaration is not recursive
 
-                let argsEnv = argsToEnv (List.collect (fun l -> l) args)   
+                let args = argsToEnv (List.collect (fun l -> l) args)   
        
-                let (env, signalFuncErrors) = 
-                    if isFSRPBinding then 
-                        ({ defaultEnv with  
-                            NowEnv = argsEnv;
-                            LaterEnv = List.fold (fun env memberOrFunvOrVal -> addToEnv env memberOrFunvOrVal) (Map([])) recMemberOrFuncOrVals
-                        }, [])
-                    else 
-                        (defaultEnv, [])
+                let env = 
+                    {   
+                        NowEnv = args;
+                        Later = false;
+                        LaterEnv = List.fold 
+                                    (fun laterEnv recVar -> addToEnv laterEnv recVar) 
+                                    (Map([])) 
+                                    recursionVariables
+                    }
+                    
                 let exprError = 
                     if memberOrFuncOrValue.IsCompilerGenerated then       
                         try
@@ -303,7 +314,7 @@ open FSRPError
                         with
                         | _ -> []
                     else checkExpr env body
-                (List.append signalFuncErrors exprError)
+                exprError
             else
                 []
     
@@ -316,7 +327,7 @@ open FSRPError
                 checkDeclarations subDecls mutualRecursionNamesMap mutualRecursionMFVMap
             | FSharpImplementationFileDeclaration.MemberOrFunctionOrValue(memberOrFuncOrVal, args, body) ->
                 checkMemberOrFunctionOrValue memberOrFuncOrVal args body mutualRecursionNamesMap mutualRecursionMFVMap
-            | FSharpImplementationFileDeclaration.InitAction(initExpr) -> checkExpr defaultEnv initExpr
+            | FSharpImplementationFileDeclaration.InitAction(initExpr) -> []
 
         let rec bundleDeclarations (declarations: FSharpImplementationFileDeclaration list) (mutualRecursionNamesMap : Map<string, string list>) (mutualRecursionMFVMap: Map<string, FSharpMemberOrFunctionOrValue>) : Map<string, FSharpMemberOrFunctionOrValue>  =
             (List.fold (fun acc decl ->  bundleDeclaration decl mutualRecursionNamesMap acc) mutualRecursionMFVMap declarations)
@@ -332,8 +343,6 @@ open FSRPError
         // create a map from the full name of module level let declarations to the MemberOrFunctionOrValue element that it corresponds with
         let createMutualRecursionMFVMap (implementationFileContents: FSharpImplementationFileContents) (mutualRecursionNamesMap : Map<string, string list>) =
             bundleDeclarations implementationFileContents.Declarations mutualRecursionNamesMap (Map([]))
-
-
 
 let public checkImplementationFile (implementationFileContents: FSharpImplementationFileContents) (mutualRecursionNamesMap : Map<string, string list>) =
     let mutualRecursionMFVMap = Internal.createMutualRecursionMFVMap implementationFileContents mutualRecursionNamesMap

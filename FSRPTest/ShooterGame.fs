@@ -30,7 +30,8 @@ type Player = {
 }
 let movePlayerAndProjectilesInCurrentDirection player = player
 
-let updatePlayer playerBox input = playerBox    
+[<FSRP>]
+let updatePlayer (player: Player) input = box (lazy player)
 
 let getRandomInput () : Input =
     let idx = System.Random().Next 6
@@ -44,11 +45,11 @@ let getRandomInput () : Input =
 
 let getPlayersInput () : (Input * Input) = (getRandomInput (), getRandomInput ())
 
-let drawToScreen player1 player2 = () //printfn "%A" player1
+let drawToScreen player1 player2 = ()
 
 [<FSRP>]
 let updatePlayerSignal (initPlayer : Player) (inputSignal : Signal<Input>) = 
-    scan (box (lazy updatePlayer)) (box (lazy initPlayer)) inputSignal
+    scan (box (lazy updatePlayer)) initPlayer inputSignal
 
 [<FSRP>]
 let preGameSF (initPlayer1: Player) (initPlayer2: Player) 
@@ -116,36 +117,12 @@ let initPlayer2 = {
 }
 
 let start () = 
-    let mutable tickCount = 0
     let rec run input (Eval(eval)) =
         let ((player1, player2), eval') = eval (input ())
-        tickCount <- tickCount + 1
-        if tickCount = 100000000 then
-            ()
-        else 
-            drawToScreen player1 player2
-            run input eval'
-
-    let stopWatch = System.Diagnostics.Stopwatch.StartNew()
-    let timer = new Timers.Timer()
-    timer.Interval <- 10000.0
-    timer.AutoReset <- true
-    timer.Elapsed.Add (
-        fun _ -> 
-            let elapsedSeconds = int ( (stopWatch.ElapsedMilliseconds / 1000L) )
-            printfn "%A\t%A" elapsedSeconds (GC.GetTotalMemory false)
-    )
-    timer.Enabled <- true
+        drawToScreen player1 player2
+        run input eval'
 
     let evaluator = buildEvaluator (shooterGameSF initPlayer1 initPlayer2)
+
     printfn "Starting game"
     run getPlayersInput evaluator
-    let elapsedSeconds = int ( (stopWatch.ElapsedMilliseconds / 1000L) )
-    printfn "Total average ticks per second: %A" (tickCount / elapsedSeconds)
-
-
-
-    
-  
-
-

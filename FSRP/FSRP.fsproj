@@ -4,12 +4,11 @@
     <TargetFramework>net5.0</TargetFramework>
     <PackageOutputPath>./nupkg</PackageOutputPath>
     <PackageId>FSRP</PackageId>
-    <VersionPrefix>1.0.0</VersionPrefix>
+    <VersionPrefix>1.1.0</VersionPrefix>
   </PropertyGroup>
 
   <ItemGroup>
     <Compile Include="FSRPCore.fs" />
-    <Compile Include="FSRPCoreUnmanaged.fs" />
     <Compile Include="FSRPSignal.fs">
     </Compile>
   </ItemGroup>

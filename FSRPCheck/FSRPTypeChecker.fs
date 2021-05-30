@@ -52,7 +52,7 @@ open FSRPError
                 let accessPath = t.TypeDefinition.AccessPath
                 let displayName = t.TypeDefinition.DisplayName
                 if accessPath = fsrpCoreAccessPath then
-                    (List.contains displayName fsrpCoreUnstableTypeNames)// || not (List.contains displayName fsrpCoreStableTypeNames) (commented 23/05)
+                    (List.contains displayName fsrpCoreUnstableTypeNames)
                 else if accessPath = systemAccessPath then
                     (List.contains displayName systemUnstableTypeNames)
                 else if t.GenericArguments.Count > 0 then

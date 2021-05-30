@@ -1,6 +1,6 @@
 ﻿namespace FSRP
 
-    open System
+open System
 
     module Core =
 
@@ -18,7 +18,6 @@
             let cleanup () =
                 nowHeap <- new ResizeArray<obj>()
                 laterHeap <- new ResizeArray<obj>()
-
         
         type public FSRPAttribute() = inherit System.Attribute()
 
@@ -35,14 +34,14 @@
             Store.laterHeap.Add(expr)
             Later(idx)
 
-        let public adv(laterExpr: Later<'T>) : 'T = 
+        let public adv (laterExpr: Later<'T>) : 'T = 
            let (Later(idx)) = laterExpr
            let lazyExpr : Lazy<'T> = downcast Store.nowHeap.[idx]
            lazyExpr.Force()
 
-        let public box(expr: Lazy<'T>) : Box<'T> = Box(expr)
+        let public box (expr: Lazy<'T>) : Box<'T> = Box(expr)
         
-        let public unbox(Box(boxExpr): Box<'T>) = boxExpr.Force()
+        let public unbox (Box(boxExpr): Box<'T>) = boxExpr.Force()
 
         type Eval<'IN, 'OUT> = Eval of ('IN -> ('OUT * Eval<'IN, 'OUT>))
 
@@ -74,34 +73,8 @@
             Eval(firstEval)
             
         let public buildUnfolder (s: Signal<'OUT>) : Unfold<'OUT> =
-
             let rec unfold ((o :: os): Signal<'OUT>) () =
                 do Store.progress ()
                 let tl = adv os
                 (o, Unfold(unfold tl))
             Unfold((unfold s))
-
-
-// FOR DISCUSSION, DON'T DELETE
-
-        //type private Signal<'A> (hd: 'A, tlExpr: Lazy<Signal<'A>>) =
-        //    let hd = hd
-        //    let tlExpr = tlExpr
-        //    let mutable tlDelayed = false
-        //    let mutable tlLater : Later<Signal<'A>> = Later(-1)
-
-        //    member this.Head with get() = hd
-        //    member this.Tail with get() = 
-        //        if not tlDelayed then
-        //            tlLater <- delay tlExpr
-        //            tlDelayed <- true
-        //        tlLater
-
-            
-
-        //let Signal (hd: 'A, tlExpr: Lazy<Signal<'A>>) = new Signal<'A>(hd, tlExpr)
-
-        //let (|Signal|) (s: Signal<'A>) = s.Head, s.Tail
-
-        //let rec map (f: Box<'A -> 'B>) (Signal(hd, tl): Signal<'A>) =
-        //    Signal (unbox f hd, lazy (map f (adv tl))) 

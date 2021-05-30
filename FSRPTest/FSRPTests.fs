@@ -54,7 +54,7 @@
 
     [<FSRP>]
     let rec wtf () =
-        1 :: delay (lazy (adv (delay (lazy (wtf ())))))
+        delay (lazy (adv (delay (lazy (1)))))
 
     [<FSRP>]
     let rec testRecLetInDelay i =

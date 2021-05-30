@@ -7,13 +7,12 @@
     <ToolCommandName>fsrp-check</ToolCommandName>
     <PackageOutputPath>./nupkg</PackageOutputPath>
     <PackageId>FSRPCheck</PackageId>
-    <VersionPrefix>1.0.0</VersionPrefix>
+    <VersionPrefix>1.1.0</VersionPrefix>
   </PropertyGroup>
 
   <ItemGroup>
     <Compile Include="Utility.fs" />
     <Compile Include="FSRPError.fs" />
-    <Compile Include="Examples.fs" />
     <Compile Include="FSRPRecursionChecker.fs" />
     <Compile Include="FSRPTypeChecker.fs" />
     <Compile Include="Program.fs" />

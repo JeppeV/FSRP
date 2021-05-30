@@ -18,7 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\FSRP\FSRP.fsproj" />
+    <PackageReference Include="FSharp.TypeProviders.StarterPack" Version="2.1.0" />
   </ItemGroup>
 
 </Project>

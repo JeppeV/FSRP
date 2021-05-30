@@ -13,7 +13,7 @@ let main argv =
         printfn "%A" out
         unfold eval'
 
-    let unfolder = buildUnfolder (wtf ())
+    let unfolder = buildUnfolder (zeros ())
     unfold unfolder
 
     //start ()
